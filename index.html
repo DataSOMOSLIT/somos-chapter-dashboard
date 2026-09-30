@@ -351,7 +351,7 @@
 
   <footer>
     <p>Data sources, in order: the Apps Script web app in <code>CONFIG.DATA_URL</code> (the DashboardFeed.gs endpoint, reading <code>KPIs_Historico</code> in Master_Staging_Sheet) &rarr; <code>data/kpis.json</code> &rarr; the embedded Q2 2026 copy in <code>index.html</code>.</p>
-    <p><code>li_engagement_rate</code> is a decimal (0.0185 = 1.85%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A &mdash; "Canada" is the national LinkedIn account and reports no events by design, so its event metrics are N/A every quarter.</p>
+    <p><code>li_engagement_rate</code> is a decimal (0.0185 = 1.85%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A &mdash; a quarter with no LinkedIn export yet, or a chapter with no events that quarter, shows N/A rather than 0.</p>
   </footer>
 </div>
 
@@ -375,20 +375,20 @@ const CONFIG = {
 
 /* =====================================================================
    EMBEDDED FALLBACK - Q2 2026 only. Last resort when neither the API nor
-   data/kpis.json can be reached. Sample figures; replace with real ones.
-   "Canada" is the national LinkedIn account, not a chapter with its own
-   events, so its event fields are null every quarter - not a data error.
+   data/kpis.json can be reached. These are the REAL Q2_2026 KPIs_Consolidado
+   values from an actual Master_Staging_Sheet export (2026-09-30) - not
+   invented placeholders, just a static, potentially stale copy.
    ===================================================================== */
 const EMBEDDED_KPIS = {
-  generated_at: "2026-07-08T00:00:00Z",
+  generated_at: "2026-09-30T21:00:00Z",
   sample: true,
   rows: [
-    { quarter:"2026_Q2", chapter:"Montreal",  events:6, attendance:287, largest_event:95,  largest_event_name:"Women in Tech Panel",   new_li_followers:140, total_li_followers:2540,  li_impressions:21300, li_engagement_rate:0.046, li_posts:11 },
-    { quarter:"2026_Q2", chapter:"Toronto",   events:8, attendance:412, largest_event:128, largest_event_name:"Career Fair",            new_li_followers:205, total_li_followers:3805,  li_impressions:31900, li_engagement_rate:0.041, li_posts:14 },
-    { quarter:"2026_Q2", chapter:"Vancouver", events:5, attendance:241, largest_event:88,  largest_event_name:"Startup Pitch Night",    new_li_followers:110, total_li_followers:1910,  li_impressions:16700, li_engagement_rate:0.055, li_posts:9  },
-    { quarter:"2026_Q2", chapter:"Ottawa",    events:3, attendance:126, largest_event:58,  largest_event_name:"Code & Coffee Vol. 2",   new_li_followers:48,  total_li_followers:948,   li_impressions:7200,  li_engagement_rate:0.036, li_posts:5  },
-    { quarter:"2026_Q2", chapter:"Calgary",   events:1, attendance:32,  largest_event:32,  largest_event_name:"First Calgary Meetup",   new_li_followers:33,  total_li_followers:643,   li_impressions:4600,  li_engagement_rate:0.031, li_posts:4  },
-    { quarter:"2026_Q2", chapter:"Canada",    events:null, attendance:null, largest_event:null, largest_event_name:null,                new_li_followers:365, total_li_followers:10165, li_impressions:64500, li_engagement_rate:0.048, li_posts:16 }
+    { quarter:"2026_Q2", chapter:"Montreal",  events:3, attendance:50,  largest_event:22,  largest_event_name:"Latinx Unmuted",              new_li_followers:63,  total_li_followers:841,  li_impressions:6333,  li_engagement_rate:0.1851, li_posts:11 },
+    { quarter:"2026_Q2", chapter:"Toronto",   events:3, attendance:175, largest_event:76,  largest_event_name:"Side Project Showcase",       new_li_followers:157, total_li_followers:1230, li_impressions:16448, li_engagement_rate:0.1793, li_posts:21 },
+    { quarter:"2026_Q2", chapter:"Vancouver", events:1, attendance:16,  largest_event:16,  largest_event_name:"Latinx Unmuted",              new_li_followers:35,  total_li_followers:190,  li_impressions:2451,  li_engagement_rate:0.1394, li_posts:11 },
+    { quarter:"2026_Q2", chapter:"Ottawa",    events:1, attendance:8,   largest_event:8,   largest_event_name:"Latinx Unmuted",              new_li_followers:43,  total_li_followers:225,  li_impressions:3437,  li_engagement_rate:0.1744, li_posts:10 },
+    { quarter:"2026_Q2", chapter:"Calgary",   events:2, attendance:41,  largest_event:28,  largest_event_name:"Tamos Juntos Summer Social",  new_li_followers:26,  total_li_followers:106,  li_impressions:1277,  li_engagement_rate:0.0278, li_posts:7  },
+    { quarter:"2026_Q2", chapter:"Canada",    events:1, attendance:176, largest_event:176, largest_event_name:"Behind the Curtain of Hiring",new_li_followers:190, total_li_followers:375,  li_impressions:17266, li_engagement_rate:0.171,  li_posts:22 }
   ]
 };
 
@@ -996,7 +996,7 @@ function renderSourceChip(loaded) {
   }
   bits.push(DATA.rows.length + " rows · " + DATA.quarters.length +
     " quarter" + (DATA.quarters.length === 1 ? "" : "s") + " · " + DATA.chapters.length + " chapters");
-  if (loaded.sample) bits.push("sample figures — replace with Master_Staging_Sheet data");
+  if (loaded.sample) bits.push("static snapshot — connect CONFIG.DATA_URL for live data");
   if (loaded.problems && loaded.problems.length) bits.push("fell back after: " + loaded.problems.join("; "));
   meta.textContent = bits.join(" · ");
 }

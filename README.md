@@ -84,10 +84,12 @@ the live feed connected, add rows with the new `"quarter"` value to
 - Missing values are `null` and show as **N/A**, never zero. A chapter with no
   value for the ranking metric is left off the chart (with a note saying which)
   and still appears as N/A in the table.
-- **`Canada` is the national LinkedIn account, not a chapter with its own
-  events** — its event metrics (`events`, `attendance`, `avg_attendance`,
-  `largest_event`) are N/A every quarter by design, not a data gap. Its
-  LinkedIn metrics are real national numbers.
+- **`Canada` is a real chapter, not just the national LinkedIn account** — it
+  hosts its own events (verified against `unique_events`: e.g. "Behind the
+  Curtain of Hiring", 176 attendees, Q2 2026) alongside carrying the national
+  LinkedIn numbers. A quarter where it happens to run no events still shows
+  N/A for its event columns, same as any other chapter — that's normal
+  missing-data handling, not a permanent rule about this chapter.
 - `li_engagement_rate` aggregates as a mean **weighted by total LinkedIn
   followers**, not a plain average, so a chapter with a small following
   doesn't swing the headline figure as much as one with a large one.
@@ -148,7 +150,7 @@ node test/verify.mjs
 No dependencies and no browser. The suite pulls the `<script>` block out of
 `index.html`, runs it against a small DOM stub, and asserts the parts that are
 easy to break silently: the source-fallback chain, null handling (N/A, never
-zero, including `Canada`'s by-design N/A events), the
+zero — a chapter with events but no LinkedIn export yet, or vice versa), the
 `li_engagement_rate > 1` banner, followers-weighted rate aggregation, the
 `largest_event` max aggregation, null-last sorting in both directions, URL
 round-tripping, and tolerance for `Q2_2026` / `2026-Q2` / `"4.6%"` / a
@@ -222,8 +224,13 @@ redeploy — just re-run `runCleaningAndConsolidation()` after updating
 - The categorical palette was validated for colour-vision deficiency and contrast
   against both surfaces before shipping.
 
-> **Note on the sample data.** `data/kpis.json` and the embedded copy ship with
-> placeholder figures so the dashboard is reviewable before it is wired to the
-> sheet. The source chip labels them *"sample figures"*. Replace them with real
-> `KPIs_Historico` numbers, or point `CONFIG.DATA_URL` at the `DashboardFeed.gs`
-> web app, before sharing the link outside the Data Analytics Team.
+> **Note on `data/kpis.json`.** Its Q2 2026 rows are copied verbatim from a
+> real `KPIs_Consolidado` export (2026-09-30) — not invented numbers. Its Q1
+> 2026 rows are real events/attendance computed from that same export's
+> `unique_events` tab; Q1's LinkedIn columns are `null` because that export
+> only carried one quarter of consolidated LinkedIn numbers, not because the
+> chapters had none. Either way, it's a **static snapshot**, not a live feed —
+> the source chip says so. Point `CONFIG.DATA_URL` at the deployed
+> `DashboardFeed.gs` web app (see **Apps Script setup**) so the dashboard
+> reads `KPIs_Historico` live before sharing the link outside the Data
+> Analytics Team.

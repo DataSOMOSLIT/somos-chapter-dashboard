@@ -368,7 +368,14 @@
    data/kpis.json.
    ===================================================================== */
 const CONFIG = {
-  DATA_URL: "",                  // e.g. "https://script.google.com/macros/s/AKfy.../exec"
+  DATA_URL: "",                  // DashboardFeed.gs JSON endpoint, e.g. "https://script.google.com/.../exec"
+                                  // Blocked for this org: Workspace policy forces sign-in even with
+                                  // "Anyone" access, so an unauthenticated page can't read it. Leave
+                                  // empty unless that policy changes. Use CSV_URL below instead.
+  CSV_URL: "",                    // KPIs_Historico published as CSV: Sheet -> File -> Share ->
+                                  // Publish to web -> select the KPIs_Historico tab -> CSV -> Publish.
+                                  // Not subject to the same Apps Script restriction. Refreshes every
+                                  // few minutes on Google's side.
   DATA_JSON: "data/kpis.json",
   TIMEOUT_MS: 8000
 };
@@ -523,6 +530,79 @@ async function fetchJSON(url, timeout) {
   } finally { clearTimeout(t); }
 }
 
+async function fetchText(url, timeout) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.text();
+  } finally { clearTimeout(t); }
+}
+
+/* ===================== CSV (published-to-web KPIs_Historico) =====================
+   Google's "Publish to web" CSV export isn't behind the Apps Script "Anyone"
+   restriction that blocks the JSON feed for this org, so it's the live-data
+   path in practice. Handles quoted fields (commas/quotes inside event names)
+   per RFC 4180; \r\n, \r and \n line endings. */
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+      continue;
+    }
+    if (c === '"') { inQuotes = true; }
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\r" || c === "\n") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+const normaliseHeader = s => String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Mirrors apps-script/DashboardFeed.gs's FIELD_HEADERS - same header names,
+// same case/punctuation-insensitive matching, so the CSV and JSON feeds agree.
+const CSV_FIELD_HEADERS = {
+  chapter: "chapter", period: "period",
+  events: "eventsheld", attendance: "totalattendees",
+  largest_event: "largesteventattendees", largest_event_name: "largesteventname",
+  new_li_followers: "newlinkedinfollowers", total_li_followers: "totallinkedinfollowers",
+  li_impressions: "linkedinimpressions", li_engagement_rate: "averagelinkedinengagementrate",
+  li_posts: "linkedinpostspublished"
+};
+
+function csvToRawRows(text) {
+  const table = parseCSV(text).filter(r => r.some(c => String(c ?? "").trim() !== ""));
+  if (!table.length) return [];
+  const header = table[0];
+  const colOf = {};
+  header.forEach((h, i) => {
+    const norm = normaliseHeader(h);
+    for (const key in CSV_FIELD_HEADERS) {
+      if (CSV_FIELD_HEADERS[key] === norm && colOf[key] === undefined) colOf[key] = i;
+    }
+  });
+  const out = [];
+  for (let r = 1; r < table.length; r++) {
+    const raw = {};
+    for (const key in colOf) raw[key === "period" ? "quarter" : key] = table[r][colOf[key]];
+    out.push(raw);
+  }
+  return out;
+}
+
 async function loadData() {
   const attempts = [];
   if (CONFIG.DATA_URL) {
@@ -530,6 +610,13 @@ async function loadData() {
       kind: "live",
       label: "Live · KPIs_Historico",
       run: () => fetchJSON(CONFIG.DATA_URL, CONFIG.TIMEOUT_MS)
+    });
+  }
+  if (CONFIG.CSV_URL) {
+    attempts.push({
+      kind: "live",
+      label: "Live · KPIs_Historico (published CSV)",
+      run: async () => ({ rows: csvToRawRows(await fetchText(CONFIG.CSV_URL, CONFIG.TIMEOUT_MS)) })
     });
   }
   attempts.push({

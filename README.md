@@ -34,18 +34,27 @@ the most recent one in the data.
 
 ## Data sources (in this order)
 
-1. **`CONFIG.DATA_URL` in `index.html`** — the `DashboardFeed.gs` web app,
-   live from the `KPIs_Historico` tab in `Master_Staging_Sheet`.
-2. **`data/kpis.json`** — static file in this repo.
-3. **Embedded Q2 2026 copy inside `index.html`** — last resort.
+1. **`CONFIG.DATA_URL` in `index.html`** — the `DashboardFeed.gs` web app, live
+   from `KPIs_Historico`. **Blocked for this org today** (see callout below) —
+   leave empty unless that changes.
+2. **`CONFIG.CSV_URL` in `index.html`** — `KPIs_Historico` published to the web
+   as CSV. This is the actual live-data path for this org — see
+   **Publishing `KPIs_Historico` as CSV** below.
+3. **`data/kpis.json`** — static file in this repo.
+4. **Embedded Q2 2026 copy inside `index.html`** — last resort.
 
 The dashboard walks the list top to bottom and uses the first source that
 returns usable rows. The chip under the header always says which one won, and
 names what it fell back from, so a silently stale dashboard is not possible.
 
-`CONFIG.DATA_URL` ships empty, so a fresh clone serves `data/kpis.json`. To go
-live, paste the `DashboardFeed.gs` `/exec` URL into `CONFIG.DATA_URL` and commit
-— see **Apps Script setup** below.
+> **Why not the Apps Script web app?** `DashboardFeed.gs` works and returns
+> correct data (verified via its `testFeed()` function), but this Google
+> Workspace domain (`somoslatinxintech.com`) forces sign-in on Apps Script web
+> apps regardless of the "Anyone" access setting — a domain-wide policy only a
+> Workspace admin can change. An unauthenticated static page can't get past
+> that redirect, so `CONFIG.DATA_URL` stays empty until either that policy
+> changes or the endpoint is deployed from an account outside the domain. The
+> published-CSV path below isn't subject to that restriction.
 
 ## How the data actually gets here
 
@@ -154,8 +163,9 @@ zero — a chapter with events but no LinkedIn export yet, or vice versa), the
 `li_engagement_rate > 1` banner, followers-weighted rate aggregation, the
 `largest_event` max aggregation, null-last sorting in both directions, URL
 round-tripping, and tolerance for `Q2_2026` / `2026-Q2` / `"4.6%"` / a
-capitalised `Period` header coming out of Sheets. Run it after editing
-`index.html`, `data/kpis.json`, or the metric registry.
+capitalised `Period` header coming out of Sheets, and the CSV parser (quoted
+commas in event names, doubled-quote escaping, CRLF/LF line endings). Run it
+after editing `index.html`, `data/kpis.json`, or the metric registry.
 
 ## Apps Script setup
 
@@ -200,7 +210,11 @@ can't be scripted from here:
    (ends in `/exec`).
 7. Paste that URL into `CONFIG.DATA_URL` near the top of `index.html`, commit,
    and push. The live site will start reading from `KPIs_Historico` on the
-   next load.
+   next load — **except this doesn't currently work for this org** (step 5's
+   "Anyone" setting is overridden by a domain policy that forces sign-in
+   regardless). `CONFIG.DATA_URL` stays empty for now; use the CSV method
+   below instead. Steps 1–6 are still worth doing — `testFeed()` is the
+   fastest way to sanity-check `KPIs_Historico` — just skip step 7.
 
 The endpoint also accepts `?period=2026_Q3` to scope to one quarter and
 `?debug=1` for unmapped-header / skipped-row counts — handy for checking a new
@@ -210,6 +224,30 @@ Re-deploy (Manage deployments → edit deployment → Version: **New version**)
 only after editing `DashboardFeed.gs` itself. A new quarter needs no
 redeploy — just re-run `runCleaningAndConsolidation()` after updating
 `CURRENT_PERIOD`/`CURRENT_YEAR`, and the next dashboard reload picks it up.
+
+## Publishing `KPIs_Historico` as CSV (the actual live-data path)
+
+Google's "Publish to web" is a separate mechanism from Apps Script deployments
+and isn't subject to the domain policy that blocks `DashboardFeed.gs` above —
+it gives a public, read-only CSV link that Google refreshes automatically
+every few minutes.
+
+1. Open `Master_Staging_Sheet` → **File → Share → Publish to web**.
+2. In the first dropdown, choose **`KPIs_Historico`** (not "Entire Document" —
+   publishing the whole spreadsheet would expose `unique_events` and the raw
+   attendee-level `all_events` tab too, not just the aggregated KPIs).
+3. In the second dropdown, choose **Comma-separated values (.csv)**.
+4. Click **Publish**, confirm the "this will make the tab public" dialog.
+5. Google shows a link — it looks like
+   `https://docs.google.com/spreadsheets/d/e/<long-id>/pub?gid=<id>&single=true&output=csv`.
+   Copy it.
+6. Paste that URL into `CONFIG.CSV_URL` near the top of `index.html`, commit,
+   and push. The live site starts reading real data on the next load.
+
+If this also redirects to a sign-in page (some Workspace domains restrict
+"Publish to web" too), that's a different Admin console setting — usually
+**Apps → Google Workspace → Drive and Docs → Sharing settings** — than the one
+blocking Apps Script.
 
 ## Accessibility & design notes
 

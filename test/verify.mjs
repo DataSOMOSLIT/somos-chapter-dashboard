@@ -336,5 +336,46 @@ console.log("\n14. Embedded fallback when every fetch fails");
   eq("Canada has real events in the embedded copy too (176 attendees)", F.cell(embeddedCanada, 2), "176");
 }
 
+console.log("\n15. Published-CSV parsing (Workspace policy blocks the JSON Apps Script feed for");
+console.log("    this org, so a published-to-web CSV of KPIs_Historico is the live-data path)");
+{
+  const G = await boot({ fetchImpl: servesJSON(kpis) });   // any boot exposes the sandbox's top-level fns
+  const { parseCSV, csvToRawRows, normalizeRows } = G.sandbox;
+
+  eq("parseCSV: plain fields", JSON.stringify(parseCSV("a,b,c\n1,2,3")), JSON.stringify([["a","b","c"],["1","2","3"]]));
+  eq("parseCSV: quoted field with an embedded comma",
+    JSON.stringify(parseCSV('Chapter,Largest Event Name\nMontreal,"Tamos Juntos, Summer Social"')),
+    JSON.stringify([["Chapter","Largest Event Name"],["Montreal","Tamos Juntos, Summer Social"]]));
+  eq("parseCSV: doubled quotes unescape to one quote",
+    JSON.stringify(parseCSV('a\n"3""x"""')), JSON.stringify([["a"],['3"x"']]));
+  eq("parseCSV: CRLF and bare LF both end a row",
+    JSON.stringify(parseCSV("a,b\r\n1,2\n3,4")), JSON.stringify([["a","b"],["1","2"],["3","4"]]));
+  eq("parseCSV: blank trailing line dropped, not an empty row", parseCSV("a,b\n1,2\n").length, 2);
+
+  const csv = [
+    "Chapter,Period,Events Held,Total Attendees,Average Attendees per Event,Largest Event (Attendees),Largest Event Name,New LinkedIn Followers,Total LinkedIn Followers,LinkedIn Impressions,Average LinkedIn Engagement Rate,LinkedIn Posts Published",
+    'Montreal,Q2_2026,3,50,16.7,22,"Latinx Unmuted",63,841,6333,0.1851,11',
+    'Toronto,Q2_2026,3,175,58.3,76,"Side Project Showcase, Encore",157,1230,16448,0.1793,21',
+    "Canada,Q2_2026,,,,,,,,,,,"      // blank event/LI cells -> N/A, not 0
+  ].join("\r\n");
+  const raw = csvToRawRows(csv);
+  eq("csvToRawRows: 3 data rows", raw.length, 3);
+  eq("csvToRawRows: Period column maps to `quarter`", raw[0].quarter, "Q2_2026");
+  eq("csvToRawRows: header matching is case/punctuation-insensitive like DashboardFeed.gs",
+    raw[0].chapter, "Montreal");
+  ok("csvToRawRows: quoted comma in an event name survives", raw[1].largest_event_name.includes("Encore"),
+    raw[1].largest_event_name);
+
+  const rows = normalizeRows(raw);
+  eq("normalizeRows accepts CSV output exactly like the JSON feed's", rows.length, 3);
+  const csvMontreal = rows.find(r => r.chapter === "Montreal");
+  eq("numbers parsed from CSV text", csvMontreal.attendance, 50);
+  eq("rate parsed from CSV text", csvMontreal.li_engagement_rate, 0.1851);
+  const csvCanada = rows.find(r => r.chapter === "Canada");
+  eq("blank CSV cells become null (N/A), not 0 or NaN", csvCanada.attendance, null);
+  eq("derived avg_attendance is still computed from the CSV numbers",
+    Number(csvMontreal.avg_attendance.toFixed(1)), 16.7);
+}
+
 console.log(`\n${failures ? "FAILED: " + failures + " check(s)" : "ALL CHECKS PASSED"}`);
 process.exit(failures ? 1 : 0);

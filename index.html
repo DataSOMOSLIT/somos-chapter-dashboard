@@ -350,8 +350,8 @@
   </main>
 
   <footer>
-    <p>Data sources, in order: the Apps Script web app in <code>CONFIG.DATA_URL</code> (live from <code>Master_Staging_Sheet</code>) &rarr; <code>data/kpis.json</code> &rarr; the embedded Q2 2026 copy in <code>index.html</code>.</p>
-    <p><code>li_engagement</code> and <code>retention</code> are decimals (0.185 = 18.5%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A.</p>
+    <p>Data sources, in order: the Apps Script web app in <code>CONFIG.DATA_URL</code> (the DashboardFeed.gs endpoint, reading <code>KPIs_Historico</code> in Master_Staging_Sheet) &rarr; <code>data/kpis.json</code> &rarr; the embedded Q2 2026 copy in <code>index.html</code>.</p>
+    <p><code>li_engagement_rate</code> is a decimal (0.0185 = 1.85%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A &mdash; "Canada" is the national LinkedIn account and reports no events by design, so its event metrics are N/A every quarter.</p>
   </footer>
 </div>
 
@@ -362,8 +362,10 @@
 /* =====================================================================
    CONFIG
    ---------------------------------------------------------------------
-   DATA_URL: paste the /exec URL of the Apps Script web app deployed from
-   apps-script/Code.gs. Leave it empty to skip straight to data/kpis.json.
+   DATA_URL: paste the /exec URL of the DashboardFeed.gs web app (deployed
+   from the same Apps Script project as Consolidation.gs, in a separate file
+   so the KPI pipeline is never touched). Leave empty to skip straight to
+   data/kpis.json.
    ===================================================================== */
 const CONFIG = {
   DATA_URL: "",                  // e.g. "https://script.google.com/macros/s/AKfy.../exec"
@@ -374,43 +376,41 @@ const CONFIG = {
 /* =====================================================================
    EMBEDDED FALLBACK - Q2 2026 only. Last resort when neither the API nor
    data/kpis.json can be reached. Sample figures; replace with real ones.
+   "Canada" is the national LinkedIn account, not a chapter with its own
+   events, so its event fields are null every quarter - not a data error.
    ===================================================================== */
 const EMBEDDED_KPIS = {
   generated_at: "2026-07-08T00:00:00Z",
   sample: true,
   rows: [
-    { quarter:"2026_Q2", chapter:"Austin",                 members:412, new_members:38, events:6,  attendance:487,  volunteers:14,   li_followers:2140, li_engagement:0.185, retention:0.842 },
-    { quarter:"2026_Q2", chapter:"Chicago",                members:528, new_members:51, events:8,  attendance:702,  volunteers:19,   li_followers:3105, li_engagement:0.142, retention:0.871 },
-    { quarter:"2026_Q2", chapter:"Los Angeles",            members:761, new_members:74, events:9,  attendance:1048, volunteers:27,   li_followers:4890, li_engagement:0.121, retention:0.858 },
-    { quarter:"2026_Q2", chapter:"Miami",                  members:345, new_members:44, events:5,  attendance:398,  volunteers:11,   li_followers:1870, li_engagement:0.203, retention:0.795 },
-    { quarter:"2026_Q2", chapter:"New York",               members:934, new_members:88, events:11, attendance:1362, volunteers:31,   li_followers:6420, li_engagement:0.116, retention:0.883 },
-    { quarter:"2026_Q2", chapter:"Phoenix",                members:198, new_members:27, events:3,  attendance:174,  volunteers:null, li_followers:940,  li_engagement:null,  retention:0.781 },
-    { quarter:"2026_Q2", chapter:"San Francisco Bay Area", members:812, new_members:63, events:10, attendance:1105, volunteers:24,   li_followers:5730, li_engagement:0.108, retention:0.869 },
-    { quarter:"2026_Q2", chapter:"Seattle",                members:287, new_members:22, events:4,  attendance:246,  volunteers:9,    li_followers:1425, li_engagement:0.164, retention:0.824 },
-    { quarter:"2026_Q2", chapter:"Toronto",                members:356, new_members:35, events:6,  attendance:421,  volunteers:13,   li_followers:1960, li_engagement:0.151, retention:0.837 },
-    { quarter:"2026_Q2", chapter:"Washington DC",          members:469, new_members:41, events:7,  attendance:588,  volunteers:16,   li_followers:2480, li_engagement:0.133, retention:0.851 }
+    { quarter:"2026_Q2", chapter:"Montreal",  events:6, attendance:287, largest_event:95,  largest_event_name:"Women in Tech Panel",   new_li_followers:140, total_li_followers:2540,  li_impressions:21300, li_engagement_rate:0.046, li_posts:11 },
+    { quarter:"2026_Q2", chapter:"Toronto",   events:8, attendance:412, largest_event:128, largest_event_name:"Career Fair",            new_li_followers:205, total_li_followers:3805,  li_impressions:31900, li_engagement_rate:0.041, li_posts:14 },
+    { quarter:"2026_Q2", chapter:"Vancouver", events:5, attendance:241, largest_event:88,  largest_event_name:"Startup Pitch Night",    new_li_followers:110, total_li_followers:1910,  li_impressions:16700, li_engagement_rate:0.055, li_posts:9  },
+    { quarter:"2026_Q2", chapter:"Ottawa",    events:3, attendance:126, largest_event:58,  largest_event_name:"Code & Coffee Vol. 2",   new_li_followers:48,  total_li_followers:948,   li_impressions:7200,  li_engagement_rate:0.036, li_posts:5  },
+    { quarter:"2026_Q2", chapter:"Calgary",   events:1, attendance:32,  largest_event:32,  largest_event_name:"First Calgary Meetup",   new_li_followers:33,  total_li_followers:643,   li_impressions:4600,  li_engagement_rate:0.031, li_posts:4  },
+    { quarter:"2026_Q2", chapter:"Canada",    events:null, attendance:null, largest_event:null, largest_event_name:null,                new_li_followers:365, total_li_followers:10165, li_impressions:64500, li_engagement_rate:0.048, li_posts:16 }
   ]
 };
 
 /* =====================================================================
    METRIC REGISTRY - one row per sortable / rankable column.
    fmt:  int | dec1 | pct
-   agg:  sum | wmean (members-weighted) | ratio (num/den)
+   agg:  sum | wmean (weighted by `weight`) | ratio (num/den) | max
    ===================================================================== */
 const METRICS = [
-  { key:"members",       label:"Total members",      short:"Members",     fmt:"int",  agg:"sum" },
-  { key:"new_members",   label:"New members",        short:"New",         fmt:"int",  agg:"sum" },
-  { key:"events",        label:"Events held",        short:"Events",      fmt:"int",  agg:"sum" },
-  { key:"attendance",    label:"Event attendance",   short:"Attendance",  fmt:"int",  agg:"sum" },
-  { key:"avg_attendance",label:"Attendance / event", short:"Avg / event", fmt:"dec1", agg:"ratio", num:"attendance", den:"events", derived:true },
-  { key:"volunteers",    label:"Active volunteers",  short:"Volunteers",  fmt:"int",  agg:"sum" },
-  { key:"li_followers",  label:"LinkedIn followers", short:"LI followers",fmt:"int",  agg:"sum" },
-  { key:"li_engagement", label:"LinkedIn engagement",short:"LI engmt.",   fmt:"pct",  agg:"wmean", weight:"members" },
-  { key:"retention",     label:"Member retention",   short:"Retention",   fmt:"pct",  agg:"wmean", weight:"members" }
+  { key:"events",             label:"Events held",               short:"Events",       fmt:"int",  agg:"sum" },
+  { key:"attendance",         label:"Total attendance",          short:"Attendance",   fmt:"int",  agg:"sum" },
+  { key:"avg_attendance",     label:"Attendance / event",        short:"Avg / event",  fmt:"dec1", agg:"ratio", num:"attendance", den:"events", derived:true },
+  { key:"largest_event",      label:"Largest single event",      short:"Largest event",fmt:"int",  agg:"max" },
+  { key:"new_li_followers",   label:"New LinkedIn followers",    short:"New LI",       fmt:"int",  agg:"sum" },
+  { key:"total_li_followers", label:"Total LinkedIn followers",  short:"Total LI",     fmt:"int",  agg:"sum" },
+  { key:"li_impressions",     label:"LinkedIn impressions",      short:"Impressions",  fmt:"int",  agg:"sum" },
+  { key:"li_engagement_rate", label:"LinkedIn engagement rate",  short:"LI engmt.",    fmt:"pct",  agg:"wmean", weight:"total_li_followers" },
+  { key:"li_posts",           label:"LinkedIn posts published",  short:"LI posts",     fmt:"int",  agg:"sum" }
 ];
 const METRIC_BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
-const TILE_KEYS = ["members", "events", "attendance", "li_engagement"];
-const DEFAULTS = { rank: "members", sort: "members", dir: "desc" };
+const TILE_KEYS = ["events", "attendance", "new_li_followers", "li_engagement_rate"];
+const DEFAULTS = { rank: "attendance", sort: "attendance", dir: "desc" };
 
 /* ===================== helpers ===================== */
 const $ = id => document.getElementById(id);
@@ -495,16 +495,17 @@ function normalizeRows(raw) {
   for (const r of raw || []) {
     if (!r) continue;
     const chapter = String(r.chapter != null ? r.chapter : (r.Chapter != null ? r.Chapter : "")).trim();
-    const quarter = normQuarter(r.quarter != null ? r.quarter : (r.Quarter != null ? r.Quarter : ""));
+    const quarter = normQuarter(r.quarter != null ? r.quarter : (r.Period != null ? r.Period : (r.period != null ? r.period : "")));
     if (!chapter || !/^\d{4}_Q[1-4]$/.test(quarter)) continue;
     const row = { chapter, chapterSlug: slug(chapter), quarter };
     for (const m of METRICS) {
       if (m.derived) continue;
-      const raw1 = r[m.key];
-      const raw2 = r[m.label];
-      const raw3 = r[m.key.toUpperCase()];
-      row[m.key] = num(raw1 !== undefined ? raw1 : (raw2 !== undefined ? raw2 : raw3));
+      row[m.key] = num(r[m.key]);
     }
+    row.largest_event_name = r.largest_event_name != null && String(r.largest_event_name).trim() !== ""
+      && !/^(n\/?a|null|none)$/i.test(String(r.largest_event_name).trim())
+      ? String(r.largest_event_name).trim()
+      : null;
     // Derived: attendance per event. Null unless both parts are present and events > 0.
     row.avg_attendance = (row.attendance !== null && row.events) ? row.attendance / row.events : null;
     out.push(row);
@@ -527,7 +528,7 @@ async function loadData() {
   if (CONFIG.DATA_URL) {
     attempts.push({
       kind: "live",
-      label: "Live · Master_Staging_Sheet",
+      label: "Live · KPIs_Historico",
       run: () => fetchJSON(CONFIG.DATA_URL, CONFIG.TIMEOUT_MS)
     });
   }
@@ -561,7 +562,7 @@ async function loadData() {
 
 /* ===================== data rules / warning banner ===================== */
 function checkDataRules(rows) {
-  const offenders = rows.filter(r => r.li_engagement !== null && r.li_engagement > 1);
+  const offenders = rows.filter(r => r.li_engagement_rate !== null && r.li_engagement_rate > 1);
   const banner = $("banner");
   if (!offenders.length) { banner.hidden = true; banner.textContent = ""; return; }
 
@@ -572,13 +573,13 @@ function checkDataRules(rows) {
   glyph.className = "glyph"; glyph.setAttribute("aria-hidden", "true"); glyph.textContent = "⚠";
   const body = document.createElement("div");
   const strong = document.createElement("strong");
-  strong.textContent = "Warning: " + offenders.length + " li_engagement value" + (offenders.length > 1 ? "s" : "") + " above 1";
+  strong.textContent = "Warning: " + offenders.length + " LinkedIn engagement rate value" + (offenders.length > 1 ? "s" : "") + " above 1";
   const p = document.createElement("div");
-  p.textContent = "li_engagement must be a decimal (0.185 = 18.5%). These rows look like percentages entered as whole numbers — fix them at the source:";
+  p.textContent = "li_engagement_rate must be a decimal (0.0185 = 1.85%). LinkedIn sometimes exports this as a percentage — fix it at the source (Consolidation.gs / KPIs_Historico):";
   const ul = document.createElement("ul");
   for (const o of offenders.slice(0, 12)) {
     const li = document.createElement("li");
-    li.textContent = o.chapter + " · " + quarterLabel(o.quarter) + " · " + o.li_engagement;
+    li.textContent = o.chapter + " · " + quarterLabel(o.quarter) + " · " + o.li_engagement_rate;
     ul.appendChild(li);
   }
   if (offenders.length > 12) {
@@ -601,6 +602,11 @@ function aggregate(rows, metric) {
       numSum += r[m.num]; denSum += r[m.den]; seen = true;
     }
     return seen && denSum > 0 ? numSum / denSum : null;
+  }
+  if (m.agg === "max") {
+    let best = null;
+    for (const r of rows) { const v = r[m.key]; if (v === null) continue; if (best === null || v > best) best = v; }
+    return best;
   }
   if (m.agg === "wmean") {
     let wSum = 0, vSum = 0, plainCount = 0, plainSum = 0;
@@ -651,7 +657,12 @@ function renderCards() {
     if (m.agg === "wmean") {
       const note = document.createElement("p");
       note.className = "hint";
-      note.textContent = "Weighted by chapter membership.";
+      note.textContent = "Weighted by total LinkedIn followers.";
+      card.append(note);
+    } else if (m.agg === "max") {
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = "Largest single event, not a sum.";
       card.append(note);
     }
 

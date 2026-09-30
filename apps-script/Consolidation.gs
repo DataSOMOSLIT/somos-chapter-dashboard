@@ -400,11 +400,79 @@ function syncPublicFeedNow() {
 }
 
 // ============================================================
+// EXPORT KPIs_Historico AS JSON (for data/kpis.json in the dashboard repo)
+// ============================================================
+/**
+ * Run this directly (function dropdown -> exportKpisJson -> Run) whenever the
+ * dashboard's static data/kpis.json needs refreshing by hand - the practical
+ * path while somoslatinxintech.com's Workspace policy blocks every direct
+ * live-feed option (Apps Script "Anyone", "Publish to web", and even sharing
+ * a mirror spreadsheet with an external account all redirect to a sign-in
+ * page or get rejected outright).
+ *
+ * View -> Logs prints ready-to-paste JSON matching data/kpis.json's shape
+ * exactly - built straight from KPIs_Historico, so it can't drift from what
+ * was actually consolidated. Copy the logged block and either replace
+ * data/kpis.json's entire contents with it, or hand it to whoever maintains
+ * the dashboard repo.
+ */
+function exportKpisJson() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("KPIs_Historico");
+  if (!sheet) {
+    Logger.log("KPIs_Historico not found - run runCleaningAndConsolidation() first.");
+    return;
+  }
+
+  const values = sheet.getDataRange().getValues();
+  const rows = [];
+  for (let r = 1; r < values.length; r++) {
+    const v = values[r];
+    if (!v[0]) continue;                                  // blank row
+    rows.push({
+      quarter: periodToQuarter_(v[1]),
+      chapter: v[0],
+      events: valueOrNull_(v[2]),
+      attendance: valueOrNull_(v[3]),
+      largest_event: valueOrNull_(v[5]),
+      largest_event_name: valueOrNull_(v[6]),
+      new_li_followers: valueOrNull_(v[7]),
+      total_li_followers: valueOrNull_(v[8]),
+      li_impressions: valueOrNull_(v[9]),
+      li_engagement_rate: valueOrNull_(v[10]),
+      li_posts: valueOrNull_(v[11])
+    });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = {
+    _comment: "Exported from KPIs_Historico via Consolidation.gs's exportKpisJson() on " + today +
+      ". Replace data/kpis.json's contents with this.",
+    generated_at: new Date().toISOString(),
+    sample: true,
+    source: "KPIs_Historico export (" + today + ")",
+    rows: rows
+  };
+
+  Logger.log(JSON.stringify(payload, null, 2));
+}
+
+function valueOrNull_(v) {
+  return (v === NA_LABEL || v === "" || v === null || v === undefined) ? null : v;
+}
+
+/** "Q2_2026" -> "2026_Q2" (data/kpis.json's convention; KPIs_Historico uses the other order). */
+function periodToQuarter_(label) {
+  const m = String(label).match(/^Q([1-4])_(\d{4})$/);
+  return m ? (m[2] + "_Q" + m[1]) : String(label);
+}
+
+// ============================================================
 // CUSTOM MENU
 // ============================================================
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Dashboard Chapters")
     .addItem("Clean and Consolidate Data", "runCleaningAndConsolidation")
+    .addItem("Export KPIs as JSON (for dashboard repo)", "exportKpisJson")
     .addToUi();
 }

@@ -34,39 +34,66 @@ the most recent one in the data.
 
 ## Data sources (in this order)
 
-1. **`CONFIG.DATA_URL` in `index.html`** — a JSON feed of `KPIs_Historico`. In
-   practice this has to be **`apps-script/PublicFeedMirror.gs`**, deployed
-   from an account outside `somoslatinxintech.com` against a small mirror
-   spreadsheet — see **Mirroring `KPIs_Historico` to an external account**
-   below for why and how.
+1. **`CONFIG.DATA_URL` in `index.html`** — a JSON feed of `KPIs_Historico`.
+   Currently unused for this org (see callout below) — would be
+   `apps-script/PublicFeedMirror.gs` deployed from an external account,
+   *if* that path gets unblocked. See **Mirroring `KPIs_Historico` to an
+   external account** below.
 2. **`CONFIG.CSV_URL` in `index.html`** — `KPIs_Historico` published to the web
-   as CSV. **Also blocked for this org** (same callout below) — kept in the
-   code for orgs whose Workspace doesn't restrict "Publish to web".
-3. **`data/kpis.json`** — static file in this repo.
+   as CSV. **Also blocked for this org** (same callout) — kept in the code for
+   orgs whose Workspace doesn't restrict "Publish to web".
+3. **`data/kpis.json`** — static file in this repo. **This is the actual
+   data source in practice right now** — refreshed by hand each quarter via
+   `Consolidation.gs`'s `exportKpisJson()`. See **Updating `data/kpis.json`
+   each quarter** below.
 4. **Embedded Q2 2026 copy inside `index.html`** — last resort.
 
 The dashboard walks the list top to bottom and uses the first source that
 returns usable rows. The chip under the header always says which one won, and
 names what it fell back from, so a silently stale dashboard is not possible.
 
-> **Why not read `Master_Staging_Sheet` directly?** Both natural options were
-> tried and both are blocked by the same kind of domain-wide Google Workspace
+> **Why not read `Master_Staging_Sheet` directly?** Three options were tried,
+> in order, and all three are blocked by the same domain-wide Google Workspace
 > policy on `somoslatinxintech.com` — not a per-deployment setting, so nothing
-> in the deploy dialog fixes it:
+> in a deploy dialog fixes it:
 > - **`DashboardFeed.gs`** (a JSON Apps Script web app) works and returns
 >   correct data (verified via its `testFeed()` function) — but the domain
 >   forces sign-in on Apps Script web apps regardless of the "Anyone" access
 >   setting.
 > - **Publishing `KPIs_Historico` to the web as CSV** returns `401
->   Unauthorized` / a Google sign-in page the same way.
+>   Unauthorized` / a sign-in page the same way.
+> - **Sharing a mirror spreadsheet with an external Google account** (even
+>   just as Viewer, even a single named address, not a public link) is
+>   rejected outright — this domain blocks sharing *out* of the organization
+>   entirely, not just anonymous/public access.
 >
-> Only a Workspace admin can lift either restriction. Rather than wait on
-> that, the dashboard reads from a **mirror**: a separate, minimal spreadsheet
-> that isn't owned by this domain, containing nothing but a copy of
-> `KPIs_Historico` (never `unique_events` or `all_events`, which carry
-> attendee names and emails). An external account reads *that* — which isn't
-> subject to `somoslatinxintech.com`'s policy — and that account's deployment
-> is what `CONFIG.DATA_URL` actually points to.
+> Only a Workspace admin can lift this. Rather than wait on that, the
+> dashboard's live numbers currently come from **`data/kpis.json`**, refreshed
+> by hand each quarter — see below. A mirror *can* still work, since Workspace
+> policies almost never block *receiving* a share from outside the
+> organization, only sending one — see **Mirroring `KPIs_Historico` to an
+> external account** for that path, kept here for if/when it's worth setting up.
+
+## Updating `data/kpis.json` each quarter
+
+Since none of the live-feed options above work for this org today, the
+dashboard's real data source is `data/kpis.json`, refreshed by hand. This
+takes a minute:
+
+1. In `Master_Staging_Sheet`'s Apps Script project (`Consolidation.gs`), run
+   **Dashboard Chapters → Export KPIs as JSON (for dashboard repo)** from the
+   Sheet's menu (or the function dropdown → `exportKpisJson` → Run).
+2. **View → Logs** prints a ready-to-paste JSON block — built directly from
+   `KPIs_Historico`, so it can't drift from what was actually consolidated.
+3. Copy that whole block and replace `data/kpis.json`'s contents with it
+   (or send it to whoever maintains the dashboard repo).
+4. Commit and push. The live site picks it up immediately — no deploy step,
+   since it's a plain file in the repo GitHub Pages already serves.
+
+Do this after every `runCleaningAndConsolidation()` run (i.e. every quarter).
+`exportKpisJson()` exports **every** quarter currently in `KPIs_Historico`, not
+just the latest, so pasting its output replaces the file wholesale rather than
+appending.
 
 ## How the data actually gets here
 
@@ -243,51 +270,63 @@ returns `401 Unauthorized` / a sign-in page, the same failure mode as the web
 app above). `CONFIG.CSV_URL` stays in the code for orgs whose Workspace
 doesn't restrict "Publish to web", but doesn't work for this one either.
 
-## Mirroring `KPIs_Historico` to an external account (the actual live-data path)
+## Mirroring `KPIs_Historico` to an external account (optional, deferred)
 
-Since this domain blocks public access to files it owns — both mechanisms
-above — the working approach is a **mirror**: a separate, minimal spreadsheet,
-not owned by `somoslatinxintech.com`, containing nothing but a copy of
-`KPIs_Historico` (never `unique_events` or `all_events`, which carry attendee
-names and emails). An account outside the domain reads *that* instead, which
-isn't subject to the domain's policy.
+**Not currently in use** — the manual export above is what actually runs this
+dashboard. This is here for later, if a live feed becomes worth the setup.
 
-**One-time setup:**
+The idea: a **mirror** — a separate, minimal spreadsheet, not owned by
+`somoslatinxintech.com`, containing nothing but a copy of `KPIs_Historico`
+(never `unique_events` or `all_events`, which carry attendee names and
+emails). An account outside the domain reads *that* instead, which isn't
+subject to the domain's policy.
 
-1. From any Google account, create a new blank Google Sheet — e.g. "SOMOS
+**The direction matters.** The first attempt at this had `Consolidation.gs`'s
+own account create the mirror and try to share it *out* to an external
+account — rejected, same as the CSV publish above: this domain blocks sharing
+out of the organization entirely, in any form. The fix is to reverse it: have
+the **external account own the mirror** and share it *into* the domain — a
+Workspace's outbound-sharing restriction essentially never blocks *receiving*
+a share from outside, only sending one.
+
+**One-time setup** (needs a Google account outside `somoslatinxintech.com`
+with room to create a file in Drive — this project's `lalorelu@gmail.com` was
+out of storage space when this was attempted, which is why it's deferred, not
+because the approach doesn't work):
+
+1. From that external account, create a new blank Google Sheet — e.g. "SOMOS
    Dashboard · Public Feed." Copy its ID out of the URL
    (`.../spreadsheets/d/`**`<this part>`**`/edit`).
-2. In `Master_Staging_Sheet`'s Apps Script project, open `Consolidation.gs`
-   and set `PUBLIC_FEED_SHEET_ID` (near the top) to that ID. Save.
-   `Consolidation.gs`'s account needs **Editor** access on the mirror to write
-   to it — share the mirror with that account as Editor, or create the mirror
-   from that account to begin with.
-3. Run ▶ **`syncPublicFeedNow`** once (function dropdown, inside
-   `Consolidation.gs`) to populate the mirror immediately. View → Logs
-   confirms it copied. (Runs automatically from here on, as part of
-   `runCleaningAndConsolidation()`.)
-4. Share the mirror sheet as **Viewer** with the external account that will
-   serve it publicly — e.g. a personal Gmail address (`lalorelu@gmail.com` for
-   this project) — **File → Share**.
-5. From that external account: open the mirror sheet → **Extensions → Apps
-   Script**. (If Viewer-only access hides that menu, use
-   [script.google.com](https://script.google.com) → **New project** instead —
-   a standalone project not opened via the sheet works fine, since the script
-   opens the mirror by ID.)
+2. From that same external account, **share the new sheet with the
+   `somoslatinxintech.com` account that runs `Consolidation.gs`, as Editor**
+   (File → Share). This is the direction that isn't blocked.
+3. Back in `Master_Staging_Sheet`'s Apps Script project, open
+   `Consolidation.gs` and set `PUBLIC_FEED_SHEET_ID` (near the top) to that
+   ID. Save.
+4. Run ▶ **`syncPublicFeedNow`** once (function dropdown) to populate the
+   mirror immediately — this account now has Editor access on a file it
+   doesn't own, which `SpreadsheetApp.openById()` can write to regardless of
+   who owns it. View → Logs confirms it copied. (Runs automatically from here
+   on, as part of `runCleaningAndConsolidation()`.)
+5. From the **external account**: open the mirror sheet → **Extensions →
+   Apps Script** (or [script.google.com](https://script.google.com) → **New
+   project**, since a standalone project not opened via the sheet works fine
+   too — the script opens the mirror by ID either way).
 6. Paste in this repo's **`apps-script/PublicFeedMirror.gs`**. Set
    `MIRROR_SHEET_ID` near the top to the same ID from step 1. Save.
-7. Run ▶ **`testFeed`** once to authorize (this account only needs read access
-   to the mirror) and confirm the row count in View → Logs.
+7. Run ▶ **`testFeed`** once to authorize and confirm the row count in
+   View → Logs.
 8. **Deploy → New deployment → Web app.** *Execute as:* **Me**. *Who has
-   access:* **Anyone** — this account isn't under `somoslatinxintech.com`'s
-   policy, so this should actually work this time (verify: the `/exec` URL
-   should return JSON directly, not redirect to a sign-in page).
+   access:* **Anyone** — this account owns the file and isn't under
+   `somoslatinxintech.com`'s policy, so this should actually work (verify: the
+   `/exec` URL should return JSON directly, not redirect to a sign-in page).
 9. Paste that URL into `CONFIG.DATA_URL` in `index.html`, commit, and push.
 
-**Every subsequent quarter:** after running `runCleaningAndConsolidation()` in
-`Consolidation.gs` as usual, the mirror updates automatically (it's called
-from inside that function) — no extra step, and no redeploy of
-`PublicFeedMirror.gs` needed unless its own code changes.
+**Every subsequent quarter**, once set up: after running
+`runCleaningAndConsolidation()` in `Consolidation.gs` as usual, the mirror
+updates automatically (it's called from inside that function) — no extra
+step, and no redeploy of `PublicFeedMirror.gs` needed unless its own code
+changes.
 
 ## Accessibility & design notes
 

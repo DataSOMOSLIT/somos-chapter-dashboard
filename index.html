@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOMOS Latinx in Tech · Chapter Performance Dashboard</title>
+<meta name="description" content="Interactive dashboard for SOMOS Latinx in Tech chapter KPIs.">
+<style>
+  /* ---------------------------------------------------------------------
+     Design tokens. Light values live on bare :root; the dark values are
+     declared twice - once for the OS setting, once for the theme toggle -
+     so the toggle wins in both directions.
+     --------------------------------------------------------------------- */
+  :root {
+    color-scheme: light;
+    --plane:        #f9f9f7;
+    --surface:      #fcfcfb;
+    --ink:          #0b0b0b;
+    --ink-2:        #52514e;
+    --ink-muted:    #898781;
+    --grid:         #e1e0d9;
+    --axis:         #c3c2b7;
+    --ring:         rgba(11,11,11,0.10);
+    --series-1:     #2a78d6;
+    --series-1-hi:  #3987e5;
+    --deemph:       #e1e0d9;
+    --good:         #0ca30c;
+    --good-text:    #006300;
+    --warning:      #fab219;
+    --critical:     #d03b3b;
+    --warn-wash:    #fdf4de;
+    --hover-wash:   rgba(11,11,11,0.035);
+    --radius:       10px;
+    --font:         system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:      #0d0d0d;
+      --surface:    #1a1a19;
+      --ink:        #ffffff;
+      --ink-2:      #c3c2b7;
+      --ink-muted:  #898781;
+      --grid:       #2c2c2a;
+      --axis:       #383835;
+      --ring:       rgba(255,255,255,0.10);
+      --series-1:   #3987e5;
+      --series-1-hi:#5598e7;
+      --deemph:     #383835;
+      --good:       #0ca30c;
+      --good-text:  #0ca30c;
+      --warning:    #fab219;
+      --critical:   #d03b3b;
+      --warn-wash:  #2a2410;
+      --hover-wash: rgba(255,255,255,0.05);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:      #0d0d0d;
+    --surface:    #1a1a19;
+    --ink:        #ffffff;
+    --ink-2:      #c3c2b7;
+    --ink-muted:  #898781;
+    --grid:       #2c2c2a;
+    --axis:       #383835;
+    --ring:       rgba(255,255,255,0.10);
+    --series-1:   #3987e5;
+    --series-1-hi:#5598e7;
+    --deemph:     #383835;
+    --good:       #0ca30c;
+    --good-text:  #0ca30c;
+    --warning:    #fab219;
+    --critical:   #d03b3b;
+    --warn-wash:  #2a2410;
+    --hover-wash: rgba(255,255,255,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    font: 14px/1.5 var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+  a { color: var(--series-1); }
+
+  /* ---- header ---- */
+  .masthead { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); margin: 0 0 6px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+  .owner { margin: 0; color: var(--ink-2); font-size: 13px; }
+  .owner code { font-size: 12px; color: var(--ink-2); }
+
+  .btn {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:hover { background: var(--hover-wash); }
+  .btn:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ---- banners & notes ---- */
+  .banner {
+    display: flex; gap: 10px; align-items: flex-start;
+    border: 1px solid var(--warning); background: var(--warn-wash);
+    border-radius: var(--radius); padding: 12px 14px; margin: 16px 0 0;
+    font-size: 13px; color: var(--ink);
+  }
+  .banner strong { display: block; margin-bottom: 2px; }
+  .banner .glyph { flex: 0 0 auto; font-size: 15px; line-height: 1.35; }
+  .banner ul { margin: 6px 0 0; padding-left: 18px; }
+
+  .sourcebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 0; font-size: 12px; color: var(--ink-2); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--ring); border-radius: 999px;
+    padding: 4px 10px; background: var(--surface);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: 0 0 auto; }
+  .dot.live { background: var(--good); }
+  .dot.static { background: var(--series-1); }
+  .dot.embedded { background: var(--warning); }
+
+  /* ---- filter row: one row, above everything it scopes ---- */
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+    margin: 20px 0 0; padding: 16px; background: var(--surface);
+    border: 1px solid var(--ring); border-radius: var(--radius);
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field > label, .field > .flabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
+  select {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; min-width: 190px;
+  }
+  select:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  .filters .spacer { flex: 1 1 auto; }
+
+  /* chapters combobox */
+  details.combo { position: relative; }
+  details.combo > summary {
+    list-style: none; cursor: pointer; font-size: 13px;
+    background: var(--surface); border: 1px solid var(--ring); border-radius: 8px;
+    padding: 7px 10px; min-width: 230px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  details.combo > summary::-webkit-details-marker { display: none; }
+  details.combo > summary:hover { background: var(--hover-wash); }
+  details.combo > summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  details.combo > summary .caret { color: var(--ink-muted); font-size: 10px; }
+  .combo-panel {
+    position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 280px;
+    background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius);
+    box-shadow: 0 10px 28px rgba(0,0,0,.14); padding: 6px; max-height: 340px; overflow: auto;
+  }
+  .combo-panel .opt {
+    display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+    border-radius: 7px; cursor: pointer; font-size: 13px; min-height: 32px;
+  }
+  .combo-panel .opt:hover { background: var(--hover-wash); }
+  .combo-foot { display: flex; gap: 8px; padding: 8px 9px 4px; margin-top: 4px; border-top: 1px solid var(--grid); }
+  .linkish { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--series-1); cursor: pointer; }
+  .linkish:hover { text-decoration: underline; }
+
+  /* ---- hero + stat tiles ---- */
+  main.is-loading { opacity: .45; transition: opacity .15s ease; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 20px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: var(--radius); padding: 16px;
+  }
+  .hero { grid-column: 1 / -1; }
+  @media (min-width: 900px) { .hero { grid-column: span 2; } }
+  .tile-label { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
+  .hero-value { font-size: 52px; line-height: 1.02; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .tile-value { font-size: 28px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .na { color: var(--ink-muted); font-weight: 500; }
+  .delta { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+  .delta .arrow { font-size: 11px; }
+  .delta.up   .arrow, .delta.up   .amt { color: var(--good-text); }
+  .delta.down .arrow, .delta.down .amt { color: var(--critical); }
+  .delta .amt { font-weight: 600; }
+  .hint { font-size: 12px; color: var(--ink-muted); margin: 8px 0 0; }
+
+  /* ---- section cards ---- */
+  section.panel {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: var(--radius); padding: 18px; margin-top: 20px;
+  }
+  .panel-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .sub { font-size: 12px; color: var(--ink-muted); margin: 2px 0 0; }
+
+  /* ---- ranked bars ---- */
+  .bars { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+  .bar-row {
+    display: grid; grid-template-columns: minmax(96px, 168px) 1fr; gap: 14px;
+    align-items: center; min-height: 34px; padding: 3px 6px; border-radius: 7px;
+    cursor: default;
+  }
+  .bar-row:hover, .bar-row:focus-visible { background: var(--hover-wash); outline: none; }
+  .bar-row:focus-visible { box-shadow: inset 0 0 0 2px var(--series-1); }
+  .bar-name { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .bar-fill {
+    height: 18px; background: var(--series-1);
+    border-radius: 0 4px 4px 0; flex: 0 0 auto; min-width: 2px;
+    transition: width .18s ease, background-color .12s ease;
+  }
+  .bar-row:hover .bar-fill, .bar-row:focus-visible .bar-fill { background: var(--series-1-hi); }
+  .bar-val { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .bar-baseline { border-left: 1px solid var(--axis); }
+  .bar-empty { font-size: 13px; color: var(--ink-muted); padding: 10px 6px; }
+
+  /* ---- tooltip ---- */
+  #tip {
+    position: fixed; z-index: 60; pointer-events: none; opacity: 0;
+    transform: translate(-50%, -100%); transition: opacity .1s ease;
+    background: var(--surface); border: 1px solid var(--ring); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px 10px; max-width: 260px;
+  }
+  #tip[data-open="1"] { opacity: 1; }
+  #tip .tv { font-size: 15px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+  #tip .key { width: 12px; height: 2px; border-radius: 1px; background: var(--series-1); flex: 0 0 auto; }
+  #tip .tl { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+
+  /* ---- table ---- */
+  .tablewrap { overflow-x: auto; margin-top: 14px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+  thead th {
+    position: relative; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-muted); font-weight: 600; border-bottom: 1px solid var(--axis);
+    cursor: pointer; user-select: none;
+  }
+  thead th:hover { color: var(--ink); }
+  thead th:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+  thead th[aria-sort] { color: var(--ink); }
+  thead th .sortmark { margin-left: 5px; font-size: 9px; color: var(--ink-muted); }
+  thead th[aria-sort] .sortmark { color: var(--series-1); }
+  tbody td { font-variant-numeric: tabular-nums; color: var(--ink); }
+  tbody tr:hover td { background: var(--hover-wash); }
+  tbody tr:hover td:first-child { background: var(--hover-wash); }
+  tfoot td { font-weight: 600; border-top: 1px solid var(--axis); border-bottom: 0; background: var(--surface); }
+
+  footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--ink-muted); }
+  footer p { margin: 0 0 6px; }
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    background: var(--ink); color: var(--plane); font-size: 13px;
+    padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .18s ease;
+    pointer-events: none; z-index: 70;
+  }
+  .toast[data-open="1"] { opacity: .96; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="masthead">
+      <div>
+        <p class="eyebrow">SOMOS Latinx in Tech</p>
+        <h1>Chapter Performance Dashboard</h1>
+        <p class="owner">Code ownership: Data Analytics Team · <code id="ownerEmail">laura.lugo@somoslatinxintech.com</code></p>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="copyLink" type="button"><span aria-hidden="true">&#128279;</span> Copy link to this view</button>
+        <button class="btn" id="themeBtn" type="button" aria-label="Switch colour theme"><span aria-hidden="true">&#9686;</span> Theme</button>
+      </div>
+    </div>
+
+    <div id="banner" hidden></div>
+
+    <div class="sourcebar">
+      <span class="chip"><span class="dot" id="srcDot"></span><span id="srcText">Loading data&hellip;</span></span>
+      <span id="srcMeta"></span>
+    </div>
+  </header>
+
+  <!-- Filters: one row, above everything they scope. -->
+  <div class="filters" role="group" aria-label="Dashboard filters">
+    <div class="field">
+      <label for="quarterSel">Quarter</label>
+      <select id="quarterSel"></select>
+    </div>
+
+    <div class="field">
+      <span class="flabel" id="chapLbl">Chapters</span>
+      <details class="combo" id="chapCombo">
+        <summary role="button" aria-labelledby="chapLbl" aria-expanded="false">
+          <span id="chapSummary">All chapters</span><span class="caret" aria-hidden="true">&#9660;</span>
+        </summary>
+        <div class="combo-panel" id="chapPanel"></div>
+      </details>
+    </div>
+
+    <div class="field">
+      <label for="rankSel">Rank chapters by</label>
+      <select id="rankSel"></select>
+    </div>
+
+    <span class="spacer"></span>
+
+    <div class="field">
+      <span class="flabel">&nbsp;</span>
+      <button class="btn" id="resetBtn" type="button">Reset filters</button>
+    </div>
+  </div>
+
+  <main id="main" class="is-loading">
+    <div class="cards" id="cards"></div>
+
+    <section class="panel" aria-labelledby="rankHead">
+      <div class="panel-head">
+        <div>
+          <h2 id="rankHead">Chapters ranked</h2>
+          <p class="sub" id="rankSub"></p>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+      <p class="hint" id="barsNote" hidden></p>
+    </section>
+
+    <section class="panel" aria-labelledby="tableHead">
+      <div class="panel-head">
+        <div>
+          <h2 id="tableHead">All metrics</h2>
+          <p class="sub">Click any column header to sort. Missing values show as N/A, never zero.</p>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table id="kpiTable">
+          <caption class="sr">Chapter KPIs for the selected quarter and chapters</caption>
+          <thead><tr id="headRow"></tr></thead>
+          <tbody id="bodyRows"></tbody>
+          <tfoot><tr id="footRow"></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Data sources, in order: the Apps Script web app in <code>CONFIG.DATA_URL</code> (live from <code>Master_Staging_Sheet</code>) &rarr; <code>data/kpis.json</code> &rarr; the embedded Q2 2026 copy in <code>index.html</code>.</p>
+    <p><code>li_engagement</code> and <code>retention</code> are decimals (0.185 = 18.5%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A.</p>
+  </footer>
+</div>
+
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =====================================================================
+   CONFIG
+   ---------------------------------------------------------------------
+   DATA_URL: paste the /exec URL of the Apps Script web app deployed from
+   apps-script/Code.gs. Leave it empty to skip straight to data/kpis.json.
+   ===================================================================== */
+const CONFIG = {
+  DATA_URL: "",                  // e.g. "https://script.google.com/macros/s/AKfy.../exec"
+  DATA_JSON: "data/kpis.json",
+  TIMEOUT_MS: 8000
+};
+
+/* =====================================================================
+   EMBEDDED FALLBACK - Q2 2026 only. Last resort when neither the API nor
+   data/kpis.json can be reached. Sample figures; replace with real ones.
+   ===================================================================== */
+const EMBEDDED_KPIS = {
+  generated_at: "2026-07-08T00:00:00Z",
+  sample: true,
+  rows: [
+    { quarter:"2026_Q2", chapter:"Austin",                 members:412, new_members:38, events:6,  attendance:487,  volunteers:14,   li_followers:2140, li_engagement:0.185, retention:0.842 },
+    { quarter:"2026_Q2", chapter:"Chicago",                members:528, new_members:51, events:8,  attendance:702,  volunteers:19,   li_followers:3105, li_engagement:0.142, retention:0.871 },
+    { quarter:"2026_Q2", chapter:"Los Angeles",            members:761, new_members:74, events:9,  attendance:1048, volunteers:27,   li_followers:4890, li_engagement:0.121, retention:0.858 },
+    { quarter:"2026_Q2", chapter:"Miami",                  members:345, new_members:44, events:5,  attendance:398,  volunteers:11,   li_followers:1870, li_engagement:0.203, retention:0.795 },
+    { quarter:"2026_Q2", chapter:"New York",               members:934, new_members:88, events:11, attendance:1362, volunteers:31,   li_followers:6420, li_engagement:0.116, retention:0.883 },
+    { quarter:"2026_Q2", chapter:"Phoenix",                members:198, new_members:27, events:3,  attendance:174,  volunteers:null, li_followers:940,  li_engagement:null,  retention:0.781 },
+    { quarter:"2026_Q2", chapter:"San Francisco Bay Area", members:812, new_members:63, events:10, attendance:1105, volunteers:24,   li_followers:5730, li_engagement:0.108, retention:0.869 },
+    { quarter:"2026_Q2", chapter:"Seattle",                members:287, new_members:22, events:4,  attendance:246,  volunteers:9,    li_followers:1425, li_engagement:0.164, retention:0.824 },
+    { quarter:"2026_Q2", chapter:"Toronto",                members:356, new_members:35, events:6,  attendance:421,  volunteers:13,   li_followers:1960, li_engagement:0.151, retention:0.837 },
+    { quarter:"2026_Q2", chapter:"Washington DC",          members:469, new_members:41, events:7,  attendance:588,  volunteers:16,   li_followers:2480, li_engagement:0.133, retention:0.851 }
+  ]
+};
+
+/* =====================================================================
+   METRIC REGISTRY - one row per sortable / rankable column.
+   fmt:  int | dec1 | pct
+   agg:  sum | wmean (members-weighted) | ratio (num/den)
+   ===================================================================== */
+const METRICS = [
+  { key:"members",       label:"Total members",      short:"Members",     fmt:"int",  agg:"sum" },
+  { key:"new_members",   label:"New members",        short:"New",         fmt:"int",  agg:"sum" },
+  { key:"events",        label:"Events held",        short:"Events",      fmt:"int",  agg:"sum" },
+  { key:"attendance",    label:"Event attendance",   short:"Attendance",  fmt:"int",  agg:"sum" },
+  { key:"avg_attendance",label:"Attendance / event", short:"Avg / event", fmt:"dec1", agg:"ratio", num:"attendance", den:"events", derived:true },
+  { key:"volunteers",    label:"Active volunteers",  short:"Volunteers",  fmt:"int",  agg:"sum" },
+  { key:"li_followers",  label:"LinkedIn followers", short:"LI followers",fmt:"int",  agg:"sum" },
+  { key:"li_engagement", label:"LinkedIn engagement",short:"LI engmt.",   fmt:"pct",  agg:"wmean", weight:"members" },
+  { key:"retention",     label:"Member retention",   short:"Retention",   fmt:"pct",  agg:"wmean", weight:"members" }
+];
+const METRIC_BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
+const TILE_KEYS = ["members", "events", "attendance", "li_engagement"];
+const DEFAULTS = { rank: "members", sort: "members", dir: "desc" };
+
+/* ===================== helpers ===================== */
+const $ = id => document.getElementById(id);
+const slug = s => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+// Blanks, "", "-", "N/A" and non-numbers all become null - never 0.
+function num(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const s = String(v).trim();
+  if (s === "" || s === "-" || s === "—" || /^(n\/?a|null|none|tbd)$/i.test(s)) return null;
+  const n = Number(s.replace(/[, ]/g, "").replace(/%$/, ""));
+  if (!Number.isFinite(n)) return null;
+  return /%$/.test(s) ? n / 100 : n;
+}
+
+// Accepts "2026_Q2", "Q2_2026", "Q2 2026", "2026-Q2" -> "2026_Q2"
+function normQuarter(v) {
+  const s = String(v == null ? "" : v).trim();
+  let m = s.match(/^(\d{4})[_\-\s]?Q([1-4])$/i);
+  if (m) return m[1] + "_Q" + m[2];
+  m = s.match(/^Q([1-4])[_\-\s]?(\d{4})$/i);
+  if (m) return m[2] + "_Q" + m[1];
+  return s;
+}
+const quarterLabel = q => { const m = String(q).match(/^(\d{4})_Q([1-4])$/); return m ? "Q" + m[2] + " " + m[1] : String(q); };
+const quarterRank  = q => { const m = String(q).match(/^(\d{4})_Q([1-4])$/); return m ? Number(m[1]) * 4 + Number(m[2]) : -1; };
+function previousQuarter(q) {
+  const m = String(q).match(/^(\d{4})_Q([1-4])$/);
+  if (!m) return null;
+  const y = Number(m[1]), n = Number(m[2]);
+  return n === 1 ? (y - 1) + "_Q4" : y + "_Q" + (n - 1);
+}
+
+function fmt(value, kind) {
+  if (value === null || value === undefined) return null;
+  if (kind === "pct")  return (value * 100).toFixed(1) + "%";
+  if (kind === "dec1") return value.toFixed(1);
+  return Math.round(value).toLocaleString("en-US");
+}
+function setValue(el, value, kind) {
+  const text = fmt(value, kind);
+  el.textContent = text === null ? "N/A" : text;
+  el.classList.toggle("na", text === null);
+}
+
+/* ===================== state <-> URL ===================== */
+const state = { quarter: null, chapters: null, rank: DEFAULTS.rank, sort: DEFAULTS.sort, dir: DEFAULTS.dir };
+let DATA = { rows: [], quarters: [], chapters: [], source: null, sample: false, generated_at: null };
+
+function readURL() {
+  const p = new URLSearchParams(location.search);
+  const q = p.get("q");
+  if (q) state.quarter = normQuarter(q);
+  const ch = p.get("ch");
+  if (ch !== null) state.chapters = ch === "" ? [] : ch.split(",").map(s => s.trim()).filter(Boolean);
+  const rank = p.get("rank");
+  if (rank && METRIC_BY_KEY[rank]) state.rank = rank;
+  const sort = p.get("sort");
+  if (sort && (sort === "chapter" || METRIC_BY_KEY[sort])) state.sort = sort;
+  const dir = p.get("dir");
+  if (dir === "asc" || dir === "desc") state.dir = dir;
+}
+
+function writeURL() {
+  const p = new URLSearchParams();
+  if (state.quarter) p.set("q", state.quarter);
+  // Omit `ch` when every chapter is selected - shorter, shareable "all" link.
+  const allSlugs = DATA.chapters.map(c => c.slug);
+  const sel = state.chapters || allSlugs;
+  if (sel.length !== allSlugs.length) p.set("ch", sel.join(","));
+  if (state.rank !== DEFAULTS.rank) p.set("rank", state.rank);
+  if (state.sort !== DEFAULTS.sort) p.set("sort", state.sort);
+  if (state.dir !== DEFAULTS.dir) p.set("dir", state.dir);
+  const qs = p.toString();
+  history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+}
+
+/* ===================== data loading ===================== */
+function normalizeRows(raw) {
+  const out = [];
+  for (const r of raw || []) {
+    if (!r) continue;
+    const chapter = String(r.chapter != null ? r.chapter : (r.Chapter != null ? r.Chapter : "")).trim();
+    const quarter = normQuarter(r.quarter != null ? r.quarter : (r.Quarter != null ? r.Quarter : ""));
+    if (!chapter || !/^\d{4}_Q[1-4]$/.test(quarter)) continue;
+    const row = { chapter, chapterSlug: slug(chapter), quarter };
+    for (const m of METRICS) {
+      if (m.derived) continue;
+      const raw1 = r[m.key];
+      const raw2 = r[m.label];
+      const raw3 = r[m.key.toUpperCase()];
+      row[m.key] = num(raw1 !== undefined ? raw1 : (raw2 !== undefined ? raw2 : raw3));
+    }
+    // Derived: attendance per event. Null unless both parts are present and events > 0.
+    row.avg_attendance = (row.attendance !== null && row.events) ? row.attendance / row.events : null;
+    out.push(row);
+  }
+  return out;
+}
+
+async function fetchJSON(url, timeout) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+
+async function loadData() {
+  const attempts = [];
+  if (CONFIG.DATA_URL) {
+    attempts.push({
+      kind: "live",
+      label: "Live · Master_Staging_Sheet",
+      run: () => fetchJSON(CONFIG.DATA_URL, CONFIG.TIMEOUT_MS)
+    });
+  }
+  attempts.push({
+    kind: "static",
+    label: "Static · data/kpis.json",
+    run: () => fetchJSON(CONFIG.DATA_JSON, CONFIG.TIMEOUT_MS)
+  });
+
+  const problems = [];
+  for (const a of attempts) {
+    try {
+      const payload = await a.run();
+      const rows = normalizeRows(payload.rows || payload.data || payload);
+      if (!rows.length) throw new Error("no usable rows");
+      return { rows, source: a.label, kind: a.kind, sample: payload.sample === true,
+               generated_at: payload.generated_at || null, problems };
+    } catch (err) {
+      problems.push(a.label + ": " + (err && err.message ? err.message : err));
+    }
+  }
+  return {
+    rows: normalizeRows(EMBEDDED_KPIS.rows),
+    source: "Embedded fallback · Q2 2026",
+    kind: "embedded",
+    sample: true,
+    generated_at: EMBEDDED_KPIS.generated_at,
+    problems
+  };
+}
+
+/* ===================== data rules / warning banner ===================== */
+function checkDataRules(rows) {
+  const offenders = rows.filter(r => r.li_engagement !== null && r.li_engagement > 1);
+  const banner = $("banner");
+  if (!offenders.length) { banner.hidden = true; banner.textContent = ""; return; }
+
+  banner.hidden = false;
+  banner.textContent = "";
+  banner.className = "banner";
+  const glyph = document.createElement("span");
+  glyph.className = "glyph"; glyph.setAttribute("aria-hidden", "true"); glyph.textContent = "⚠";
+  const body = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = "Warning: " + offenders.length + " li_engagement value" + (offenders.length > 1 ? "s" : "") + " above 1";
+  const p = document.createElement("div");
+  p.textContent = "li_engagement must be a decimal (0.185 = 18.5%). These rows look like percentages entered as whole numbers — fix them at the source:";
+  const ul = document.createElement("ul");
+  for (const o of offenders.slice(0, 12)) {
+    const li = document.createElement("li");
+    li.textContent = o.chapter + " · " + quarterLabel(o.quarter) + " · " + o.li_engagement;
+    ul.appendChild(li);
+  }
+  if (offenders.length > 12) {
+    const li = document.createElement("li");
+    li.textContent = "…and " + (offenders.length - 12) + " more";
+    ul.appendChild(li);
+  }
+  body.append(strong, p, ul);
+  banner.append(glyph, body);
+}
+
+/* ===================== aggregation ===================== */
+function aggregate(rows, metric) {
+  const m = typeof metric === "string" ? METRIC_BY_KEY[metric] : metric;
+  if (!m || !rows.length) return null;
+  if (m.agg === "ratio") {
+    let numSum = 0, denSum = 0, seen = false;
+    for (const r of rows) {
+      if (r[m.num] === null || r[m.den] === null) continue;
+      numSum += r[m.num]; denSum += r[m.den]; seen = true;
+    }
+    return seen && denSum > 0 ? numSum / denSum : null;
+  }
+  if (m.agg === "wmean") {
+    let wSum = 0, vSum = 0, plainCount = 0, plainSum = 0;
+    for (const r of rows) {
+      const v = r[m.key];
+      if (v === null) continue;
+      plainSum += v; plainCount++;
+      const w = r[m.weight];
+      if (w !== null && w > 0) { wSum += w; vSum += v * w; }
+    }
+    if (wSum > 0) return vSum / wSum;
+    return plainCount ? plainSum / plainCount : null;   // no weights available
+  }
+  let sum = 0, seen = false;
+  for (const r of rows) { const v = r[m.key]; if (v === null) continue; sum += v; seen = true; }
+  return seen ? sum : null;
+}
+
+/* ===================== rendering ===================== */
+function selectedSlugs() { return state.chapters || DATA.chapters.map(c => c.slug); }
+function rowsFor(quarter) {
+  const sel = new Set(selectedSlugs());
+  return DATA.rows.filter(r => r.quarter === quarter && sel.has(r.chapterSlug));
+}
+
+function renderCards() {
+  const cards = $("cards");
+  cards.textContent = "";
+  const current = rowsFor(state.quarter);
+  const prevQ = previousQuarter(state.quarter);
+  const prev = DATA.quarters.includes(prevQ) ? rowsFor(prevQ) : null;
+
+  const tile = (metricKey, isHero) => {
+    const m = METRIC_BY_KEY[metricKey];
+    const card = document.createElement("div");
+    card.className = "card" + (isHero ? " hero" : "");
+
+    const label = document.createElement("p");
+    label.className = "tile-label";
+    label.textContent = isHero ? "Selected metric · " + m.label : m.label;
+
+    const value = document.createElement("p");
+    value.className = isHero ? "hero-value" : "tile-value";
+    const now = aggregate(current, m);
+    setValue(value, now, m.fmt);
+    card.append(label, value);
+
+    if (m.agg === "wmean") {
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = "Weighted by chapter membership.";
+      card.append(note);
+    }
+
+    const delta = document.createElement("p");
+    delta.className = "delta";
+    if (!prev) {
+      delta.textContent = "No " + (prevQ ? quarterLabel(prevQ) : "prior quarter") + " data to compare";
+    } else {
+      const before = aggregate(prev, m);
+      if (now === null || before === null || before === 0) {
+        delta.textContent = "Change vs " + quarterLabel(prevQ) + ": N/A";
+      } else {
+        const diff = now - before;
+        const pct = (diff / Math.abs(before)) * 100;
+        const up = diff > 0, flat = Math.abs(pct) < 0.05;
+        delta.classList.add(flat ? "flat" : up ? "up" : "down");
+        const arrow = document.createElement("span");
+        arrow.className = "arrow"; arrow.setAttribute("aria-hidden", "true");
+        arrow.textContent = flat ? "→" : up ? "▲" : "▼";
+        const amt = document.createElement("span");
+        amt.className = "amt";
+        amt.textContent = (diff > 0 ? "+" : diff < 0 ? "−" : "") + Math.abs(pct).toFixed(1) + "%";
+        const tail = document.createElement("span");
+        tail.textContent = (flat ? "flat" : up ? "up" : "down") + " vs " + quarterLabel(prevQ);
+        delta.append(arrow, amt, tail);
+      }
+    }
+    card.append(delta);
+    return card;
+  };
+
+  // Exactly one hero figure per view: the metric the reader chose to rank by.
+  cards.append(tile(state.rank, true));
+  for (const k of TILE_KEYS) if (k !== state.rank) cards.append(tile(k, false));
+}
+
+const tip = $("tip");
+function showTip(x, y, value, label) {
+  tip.textContent = "";
+  const v = document.createElement("div"); v.className = "tv";
+  const key = document.createElement("span"); key.className = "key"; key.setAttribute("aria-hidden", "true");
+  const vt = document.createElement("span"); vt.textContent = value;
+  v.append(key, vt);
+  const l = document.createElement("div"); l.className = "tl"; l.textContent = label;   // untrusted labels
+  tip.append(v, l);
+  tip.style.left = Math.min(Math.max(x, 90), window.innerWidth - 90) + "px";
+  tip.style.top = Math.max(y - 12, 56) + "px";
+  tip.dataset.open = "1";
+}
+function hideTip() { tip.dataset.open = "0"; }
+
+function renderBars() {
+  const m = METRIC_BY_KEY[state.rank];
+  const wrap = $("bars");
+  wrap.textContent = "";
+  $("rankSub").textContent = m.label + " · " + quarterLabel(state.quarter) +
+    " · " + selectedSlugs().length + " of " + DATA.chapters.length + " chapters";
+
+  const rows = rowsFor(state.quarter);
+  const withValue = rows.filter(r => r[m.key] !== null).sort((a, b) => b[m.key] - a[m.key]);
+  const missingRows = rows.filter(r => r[m.key] === null);
+
+  const note = $("barsNote");
+  if (missingRows.length) {
+    note.hidden = false;
+    note.textContent = missingRows.length + " chapter" + (missingRows.length > 1 ? "s" : "") +
+      " not charted — no " + m.label.toLowerCase() + " reported: " +
+      missingRows.map(r => r.chapter).join(", ") + ". Still listed as N/A in the table below.";
+  } else { note.hidden = true; }
+
+  if (!withValue.length) {
+    const p = document.createElement("p");
+    p.className = "bar-empty";
+    p.textContent = rows.length ? "No values reported for this metric in the selected quarter." : "No chapters selected.";
+    wrap.append(p);
+    return;
+  }
+
+  const max = withValue[0][m.key];
+  for (const r of withValue) {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.tabIndex = 0;
+    const shown = fmt(r[m.key], m.fmt);
+    row.setAttribute("aria-label", r.chapter + ": " + shown + " " + m.label.toLowerCase());
+
+    const name = document.createElement("div");
+    name.className = "bar-name"; name.textContent = r.chapter; name.title = r.chapter;
+
+    const track = document.createElement("div");
+    track.className = "bar-track bar-baseline";
+    const fill = document.createElement("div");
+    fill.className = "bar-fill";
+    // Cap at 82% so the tip label always has room and is never clipped.
+    fill.style.width = (max > 0 ? (r[m.key] / max) * 82 : 0).toFixed(2) + "%";
+    const val = document.createElement("div");
+    val.className = "bar-val"; val.textContent = shown;
+    track.append(fill, val);
+
+    row.append(name, track);
+    const label = r.chapter + " · " + quarterLabel(r.quarter) + " · " + m.label;
+    row.addEventListener("pointermove", e => showTip(e.clientX, e.clientY, shown, label));
+    row.addEventListener("pointerleave", hideTip);
+    row.addEventListener("focus", () => {
+      const b = row.getBoundingClientRect();
+      showTip(b.left + 140, b.top, shown, label);
+    });
+    row.addEventListener("blur", hideTip);
+    wrap.append(row);
+  }
+}
+
+function renderTable() {
+  const headRow = $("headRow"), body = $("bodyRows"), foot = $("footRow");
+  headRow.textContent = ""; body.textContent = ""; foot.textContent = "";
+
+  const cols = [{ key: "chapter", label: "Chapter", short: "Chapter" }].concat(METRICS);
+
+  for (const c of cols) {
+    const th = document.createElement("th");
+    th.scope = "col"; th.tabIndex = 0;
+    th.title = c.label;
+    const txt = document.createElement("span");
+    txt.textContent = c.short || c.label;
+    th.append(txt);
+    if (state.sort === c.key) {
+      th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
+      const mark = document.createElement("span");
+      mark.className = "sortmark"; mark.setAttribute("aria-hidden", "true");
+      mark.textContent = state.dir === "asc" ? "▲" : "▼";
+      th.append(mark);
+    }
+    const act = () => {
+      if (state.sort === c.key) state.dir = state.dir === "asc" ? "desc" : "asc";
+      else { state.sort = c.key; state.dir = c.key === "chapter" ? "asc" : "desc"; }
+      writeURL(); renderTable();
+    };
+    th.addEventListener("click", act);
+    th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } });
+    headRow.append(th);
+  }
+
+  const rows = rowsFor(state.quarter).slice();
+  const key = state.dir === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    if (state.sort === "chapter") return a.chapter.localeCompare(b.chapter) * key;
+    const av = a[state.sort], bv = b[state.sort];
+    if (av === null && bv === null) return a.chapter.localeCompare(b.chapter);
+    if (av === null) return 1;      // nulls always sort last, both directions
+    if (bv === null) return -1;
+    return av === bv ? a.chapter.localeCompare(b.chapter) : (av - bv) * key;
+  });
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = cols.length; td.style.textAlign = "left"; td.className = "na";
+    td.textContent = "No chapters selected.";
+    tr.append(td); body.append(tr);
+    return;
+  }
+
+  const styleRowHead = th => {
+    th.style.fontWeight = "500"; th.style.textTransform = "none";
+    th.style.letterSpacing = "0"; th.style.fontSize = "13px";
+    th.style.color = "var(--ink)"; th.style.cursor = "default";
+  };
+
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row"; styleRowHead(th); th.textContent = r.chapter;
+    tr.append(th);
+    for (const m of METRICS) {
+      const td = document.createElement("td");
+      setValue(td, r[m.key], m.fmt);
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+
+  const fth = document.createElement("th");
+  fth.scope = "row"; styleRowHead(fth);
+  fth.style.fontWeight = "600";
+  fth.textContent = "All selected (" + rows.length + ")";
+  foot.append(fth);
+  for (const m of METRICS) {
+    const td = document.createElement("td");
+    setValue(td, aggregate(rows, m), m.fmt);
+    foot.append(td);
+  }
+}
+
+function renderChapterSummary() {
+  const sel = selectedSlugs();
+  const total = DATA.chapters.length;
+  const el = $("chapSummary");
+  if (sel.length === total) el.textContent = "All chapters (" + total + ")";
+  else if (sel.length === 0) el.textContent = "No chapters";
+  else if (sel.length <= 2) el.textContent = DATA.chapters.filter(c => sel.includes(c.slug)).map(c => c.name).join(", ");
+  else el.textContent = sel.length + " of " + total + " chapters";
+}
+
+function render() {
+  renderChapterSummary();
+  renderCards();
+  renderBars();
+  renderTable();
+  $("main").classList.remove("is-loading");
+}
+
+/* ===================== filter wiring ===================== */
+function syncChapterBoxes() {
+  const sel = new Set(selectedSlugs());
+  for (const cb of $("chapPanel").querySelectorAll('input[type="checkbox"]')) cb.checked = sel.has(cb.value);
+}
+
+function buildControls() {
+  const qs = $("quarterSel");
+  qs.textContent = "";
+  for (const q of DATA.quarters) {
+    const o = document.createElement("option");
+    o.value = q; o.textContent = quarterLabel(q);
+    qs.append(o);
+  }
+  qs.value = state.quarter;
+  qs.addEventListener("change", () => { state.quarter = qs.value; writeURL(); render(); });
+
+  const rs = $("rankSel");
+  rs.textContent = "";
+  for (const m of METRICS) {
+    const o = document.createElement("option");
+    o.value = m.key; o.textContent = m.label;
+    rs.append(o);
+  }
+  rs.value = state.rank;
+  rs.addEventListener("change", () => { state.rank = rs.value; writeURL(); render(); });
+
+  const panel = $("chapPanel");
+  panel.textContent = "";
+  const sel = new Set(selectedSlugs());
+  for (const c of DATA.chapters) {
+    const lab = document.createElement("label");
+    lab.className = "opt";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = c.slug; cb.checked = sel.has(c.slug);
+    const span = document.createElement("span");
+    span.textContent = c.name;
+    lab.append(cb, span);
+    cb.addEventListener("change", () => {
+      const picked = Array.from(panel.querySelectorAll('input[type="checkbox"]')).filter(x => x.checked).map(x => x.value);
+      state.chapters = picked.length === DATA.chapters.length ? null : picked;
+      writeURL(); render();
+    });
+    panel.append(lab);
+  }
+  const foot = document.createElement("div");
+  foot.className = "combo-foot";
+  const all = document.createElement("button");
+  all.type = "button"; all.className = "linkish"; all.textContent = "Select all";
+  const none = document.createElement("button");
+  none.type = "button"; none.className = "linkish"; none.textContent = "Clear";
+  all.addEventListener("click", () => { state.chapters = null; syncChapterBoxes(); writeURL(); render(); });
+  none.addEventListener("click", () => { state.chapters = []; syncChapterBoxes(); writeURL(); render(); });
+  foot.append(all, none);
+  panel.append(foot);
+
+  const combo = $("chapCombo");
+  combo.addEventListener("toggle", () => combo.querySelector("summary").setAttribute("aria-expanded", String(combo.open)));
+  document.addEventListener("click", e => { if (combo.open && !combo.contains(e.target)) combo.open = false; });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && combo.open) combo.open = false; });
+
+  $("resetBtn").addEventListener("click", () => {
+    state.quarter = DATA.quarters[DATA.quarters.length - 1];
+    state.chapters = null;
+    state.rank = DEFAULTS.rank; state.sort = DEFAULTS.sort; state.dir = DEFAULTS.dir;
+    qs.value = state.quarter; rs.value = state.rank;
+    syncChapterBoxes(); writeURL(); render();
+  });
+}
+
+/* ===================== chrome: copy link, theme ===================== */
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.dataset.open = "1";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.dataset.open = "0"; }, 2200);
+}
+
+$("copyLink").addEventListener("click", async () => {
+  const url = location.href;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link to this view copied — paste it in Slack");
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = url; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+    ta.remove();
+    toast(ok ? "Link to this view copied — paste it in Slack" : "Copy failed — use the address bar");
+  }
+});
+
+$("themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.getAttribute("data-theme") === "dark" ||
+    (!root.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  root.setAttribute("data-theme", dark ? "light" : "dark");
+  try { localStorage.setItem("slit-theme", dark ? "light" : "dark"); } catch (e) {}
+});
+try {
+  const saved = localStorage.getItem("slit-theme");
+  if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+} catch (e) {}
+
+/* ===================== boot ===================== */
+function renderSourceChip(loaded) {
+  const dot = $("srcDot"), text = $("srcText"), meta = $("srcMeta");
+  dot.className = "dot " + loaded.kind;
+  text.textContent = loaded.source;
+  const bits = [];
+  if (loaded.generated_at) {
+    const d = new Date(loaded.generated_at);
+    bits.push(Number.isNaN(d.getTime())
+      ? "updated " + loaded.generated_at
+      : "updated " + d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
+  }
+  bits.push(DATA.rows.length + " rows · " + DATA.quarters.length +
+    " quarter" + (DATA.quarters.length === 1 ? "" : "s") + " · " + DATA.chapters.length + " chapters");
+  if (loaded.sample) bits.push("sample figures — replace with Master_Staging_Sheet data");
+  if (loaded.problems && loaded.problems.length) bits.push("fell back after: " + loaded.problems.join("; "));
+  meta.textContent = bits.join(" · ");
+}
+
+(async function boot() {
+  readURL();
+  const loaded = await loadData();
+
+  DATA.rows = loaded.rows;
+  DATA.source = loaded.source;
+  DATA.sample = loaded.sample;
+  DATA.generated_at = loaded.generated_at;
+  DATA.quarters = Array.from(new Set(loaded.rows.map(r => r.quarter))).sort((a, b) => quarterRank(a) - quarterRank(b));
+  DATA.chapters = Array.from(new Map(loaded.rows.map(r => [r.chapterSlug, { slug: r.chapterSlug, name: r.chapter }])).values())
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!state.quarter || !DATA.quarters.includes(state.quarter)) {
+    state.quarter = DATA.quarters[DATA.quarters.length - 1];
+  }
+  if (state.chapters) {
+    const valid = new Set(DATA.chapters.map(c => c.slug));
+    state.chapters = state.chapters.filter(s => valid.has(s));
+    if (state.chapters.length === DATA.chapters.length) state.chapters = null;
+  }
+
+  checkDataRules(DATA.rows);
+  renderSourceChip(loaded);
+  buildControls();
+  writeURL();
+  render();
+})();
+</script>
+</body>
+</html>

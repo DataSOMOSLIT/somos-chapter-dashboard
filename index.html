@@ -362,20 +362,24 @@
 /* =====================================================================
    CONFIG
    ---------------------------------------------------------------------
-   DATA_URL: paste the /exec URL of the DashboardFeed.gs web app (deployed
-   from the same Apps Script project as Consolidation.gs, in a separate file
-   so the KPI pipeline is never touched). Leave empty to skip straight to
-   data/kpis.json.
+   somoslatinxintech.com's Google Workspace forces sign-in on BOTH Apps
+   Script "Anyone" web apps AND "Publish to web" CSV links for files this
+   domain owns - a domain-wide policy, not a per-deployment setting. Neither
+   apps-script/DashboardFeed.gs nor a published CSV of KPIs_Historico can be
+   read by this unauthenticated page directly. See README's "Mirroring
+   KPIs_Historico to an external account" for the actual live-data path:
+   apps-script/PublicFeedMirror.gs, deployed from an account outside the
+   domain against a separate mirror spreadsheet - its /exec URL goes in
+   DATA_URL below, same as DashboardFeed.gs's would if this org's policy
+   ever allowed it directly.
    ===================================================================== */
 const CONFIG = {
-  DATA_URL: "",                  // DashboardFeed.gs JSON endpoint, e.g. "https://script.google.com/.../exec"
-                                  // Blocked for this org: Workspace policy forces sign-in even with
-                                  // "Anyone" access, so an unauthenticated page can't read it. Leave
-                                  // empty unless that policy changes. Use CSV_URL below instead.
-  CSV_URL: "",                    // KPIs_Historico published as CSV: Sheet -> File -> Share ->
-                                  // Publish to web -> select the KPIs_Historico tab -> CSV -> Publish.
-                                  // Not subject to the same Apps Script restriction. Refreshes every
-                                  // few minutes on Google's side.
+  DATA_URL: "",                  // PublicFeedMirror.gs's /exec URL (or DashboardFeed.gs's, for an
+                                  // org without this restriction). Leave empty to skip to CSV_URL.
+  CSV_URL: "",                    // A published-to-web CSV of KPIs_Historico. Also blocked for this
+                                  // org by the same kind of domain policy - kept here for orgs where
+                                  // "Publish to web" isn't restricted. Leave empty to skip to
+                                  // data/kpis.json.
   DATA_JSON: "data/kpis.json",
   TIMEOUT_MS: 8000
 };

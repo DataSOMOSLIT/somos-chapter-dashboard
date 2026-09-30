@@ -36,7 +36,25 @@
  * - "KPIs_Consolidado" (generated/overwritten automatically by this script)
  * - "KPIs_Historico" (generated/appended-to automatically by this script)
  *
+ * PUBLIC_FEED_SHEET_ID (optional): the Chapter Performance Dashboard needs a
+ * publicly-readable source, but somoslatinxintech.com's Workspace policy
+ * forces sign-in on both Apps Script "Anyone" web apps and "Publish to web"
+ * links, so neither works directly from this spreadsheet. The workaround is
+ * a separate, minimal spreadsheet - owned by anyone, shared as Viewer with an
+ * external (non-Workspace) Google account - that mirrors ONLY the aggregated
+ * KPIs_Historico table (never unique_events/all_events, which carry attendee
+ * PII). Setting PUBLIC_FEED_SHEET_ID below makes this script copy
+ * KPIs_Historico's full contents into that mirror's own "KPIs_Historico" tab
+ * every run. The external account then deploys apps-script/PublicFeedMirror.gs
+ * (a separate file in a separate project) against the mirror, which - not
+ * being subject to this domain's policy - can actually be made public. Leave
+ * PUBLIC_FEED_SHEET_ID empty to skip this (the dashboard falls back to a
+ * static data/kpis.json snapshot instead).
+ *
  * CHANGE LOG vs previous version:
+ * - Added PUBLIC_FEED_SHEET_ID / syncPublicFeed_(): mirrors KPIs_Historico
+ *   (only) into a separate spreadsheet an external account can read, since
+ *   this domain blocks public access to files it owns directly. See above.
  * - Added KPIs_Historico: consolidateKPIs_ and the new appendToHistory_ now
  *   share one row-builder (buildChapterRow_) so the two tabs can never drift
  *   apart. KPIs_Consolidado's behavior (clear + rewrite current period only)
@@ -85,6 +103,10 @@ const KPI_HEADERS = [
   "LinkedIn Posts Published"
 ];
 
+// --- OPTIONAL: fill in once the mirror spreadsheet exists (see the notice
+// above). Leave "" to skip - nothing else changes if you do. ---
+const PUBLIC_FEED_SHEET_ID = "";
+
 // ============================================================
 // MAIN ENTRY POINT
 // ============================================================
@@ -94,9 +116,11 @@ function runCleaningAndConsolidation() {
   const linkedInKPIs = getLinkedInKPIsFromDrive_();
   consolidateKPIs_(eventKPIs, linkedInKPIs, periodRange);
   appendToHistory_(eventKPIs, linkedInKPIs, periodRange);
+  const mirrored = syncPublicFeed_();
   SpreadsheetApp.getActiveSpreadsheet().toast(
     "KPIs consolidated for " + CURRENT_PERIOD + " " + CURRENT_YEAR +
-    " (events from unique_events, LinkedIn from Drive; archived to KPIs_Historico)."
+    " (events from unique_events, LinkedIn from Drive; archived to KPIs_Historico)." +
+    (mirrored ? " Mirrored to the public feed sheet." : "")
   );
 }
 
@@ -336,6 +360,43 @@ function appendToHistory_(eventKPIs, linkedInKPIs, periodRange) {
   CHAPTERS.forEach(chapter => {
     historySheet.appendRow(buildChapterRow_(chapter, eventKPIs, linkedInKPIs, periodRange));
   });
+}
+
+// ============================================================
+// MIRROR KPIs_Historico TO AN EXTERNALLY-READABLE SPREADSHEET
+// (see the "PUBLIC_FEED_SHEET_ID" notice in the file header for why this
+// exists. No-op when PUBLIC_FEED_SHEET_ID is empty. Full clear + rewrite
+// every run - it's a mirror, not its own source of truth, so there's no
+// history to preserve independently here; KPIs_Historico in THIS spreadsheet
+// remains the one true record.)
+// ============================================================
+function syncPublicFeed_() {
+  if (!PUBLIC_FEED_SHEET_ID) return false;
+
+  const source = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("KPIs_Historico");
+  if (!source) return false;
+  const values = source.getDataRange().getValues();
+
+  const mirror = SpreadsheetApp.openById(PUBLIC_FEED_SHEET_ID);
+  let mirrorSheet = mirror.getSheetByName("KPIs_Historico");
+  if (!mirrorSheet) mirrorSheet = mirror.insertSheet("KPIs_Historico");
+  mirrorSheet.clear();
+  if (values.length) {
+    mirrorSheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+  }
+  return true;
+}
+
+/**
+ * Run this directly (function dropdown -> syncPublicFeedNow -> Run) to mirror
+ * KPIs_Historico immediately, without re-running the whole consolidation -
+ * e.g. right after setting PUBLIC_FEED_SHEET_ID for the first time.
+ */
+function syncPublicFeedNow() {
+  const ok = syncPublicFeed_();
+  Logger.log(ok
+    ? "Mirrored KPIs_Historico to " + PUBLIC_FEED_SHEET_ID
+    : "Nothing mirrored - set PUBLIC_FEED_SHEET_ID first, or KPIs_Historico doesn't exist yet.");
 }
 
 // ============================================================

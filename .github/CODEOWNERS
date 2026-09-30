@@ -1,8 +1,7 @@
 # Code ownership: Data Analytics Team - laura.lugo@somoslatinxintech.com
-# CODEOWNERS takes GitHub usernames/teams, not email addresses.
-# Swap @Lauralug0 for the org team handle (e.g. @somos-latinx-in-tech/data-analytics)
-# once this repo lives under the organisation.
+# This repo lives under DataSOMOSLIT. Swap @DataSOMOSLIT for a team handle
+# (e.g. @DataSOMOSLIT/data-analytics) if/when that team is created.
 
-*                 @Lauralug0
-/data/            @Lauralug0
-/apps-script/     @Lauralug0
+*                 @DataSOMOSLIT
+/data/            @DataSOMOSLIT
+/apps-script/     @DataSOMOSLIT

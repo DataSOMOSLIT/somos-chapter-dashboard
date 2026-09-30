@@ -4,7 +4,7 @@ Interactive dashboard for chapter KPIs, hosted on GitHub Pages.
 
 **Code ownership:** Data Analytics Team · laura.lugo@somoslatinxintech.com
 
-**Live site:** https://Lauralug0.github.io/somos-chapter-dashboard/
+**Live site:** https://datasomoslit.github.io/somos-chapter-dashboard/
 
 ---
 
@@ -25,7 +25,7 @@ table sorts by any column. Every filtered view has its own URL, so
 Example shareable view — Q2 2026, three chapters, ranked by LinkedIn engagement rate:
 
 ```
-https://Lauralug0.github.io/somos-chapter-dashboard/?q=2026_Q2&ch=montreal,toronto,ottawa&rank=li_engagement_rate
+https://datasomoslit.github.io/somos-chapter-dashboard/?q=2026_Q2&ch=montreal,toronto,ottawa&rank=li_engagement_rate
 ```
 
 Unknown or stale parameters are ignored rather than breaking the view: a chapter
@@ -171,7 +171,7 @@ the live feed connected, add rows with the new `"quarter"` value to
 
 **Settings → Pages → Deploy from branch → `main` / `root`.** The site appears at
 `https://<user>.github.io/<repo>/` — for this repo,
-https://Lauralug0.github.io/somos-chapter-dashboard/.
+https://datasomoslit.github.io/somos-chapter-dashboard/.
 
 Pages takes a minute or two on the first deploy. `.nojekyll` is committed so
 files are served exactly as they are in the repo.

@@ -117,21 +117,40 @@ null-last sorting in both directions, URL round-tripping, and tolerance for
 
 ## Apps Script setup
 
-See the header comment in `apps-script/Code.gs` for the full deploy steps. The
-short version:
+The Master_Staging_Sheet is
+[10XQuSuabCKKNJdWWH6XsASdzZ_nZpqZf18V-OclH1QM](https://docs.google.com/spreadsheets/d/10XQuSuabCKKNJdWWH6XsASdzZ_nZpqZf18V-OclH1QM/edit) —
+`apps-script/Code.gs` already has that ID hard-coded in `SHEET_ID`, so it works
+whether the script ends up bound to the sheet or standalone.
 
-1. Master_Staging_Sheet → Extensions → Apps Script → paste `Code.gs`.
-2. Deploy → New deployment → **Web app**, *Execute as: Me*,
-   *Who has access: **Anyone*** (the dashboard calls it unauthenticated).
-3. Copy the `/exec` URL into `CONFIG.DATA_URL` in `index.html`.
+This step needs your own Google account and can't be scripted from here — it's
+a one-time, mostly-clicking job:
 
-The endpoint accepts `?quarter=2026_Q3` to scope to one quarter and `?debug=1`
-for a per-tab parse report (row counts, skipped rows, unrecognised headers).
-Header matching is case- and punctuation-insensitive, so `New Members`,
-`new_members` and `NEW-MEMBERS` all land in the same field.
+1. Open the sheet above → **Extensions → Apps Script**.
+2. Delete whatever is in `Code.gs` there and paste in the contents of this
+   repo's `apps-script/Code.gs`.
+3. **Run → `testPayload`** once. The first run prompts you to authorize the
+   script (it only needs read access to this spreadsheet) — approve it, then
+   check **View → Logs**: it should print the quarters found, a row count, and
+   any data-rule warnings (e.g. an `li_engagement` typed as `18.5` instead of
+   `0.185`). Fix anything it flags before moving on.
+4. **Deploy → New deployment** → gear icon → type **Web app**.
+   *Execute as:* **Me**. *Who has access:* **Anyone** (the dashboard calls this
+   URL unauthenticated — "Anyone" only exposes the KPI numbers this endpoint
+   returns, not edit access to the sheet).
+5. Click **Deploy**, authorize again if prompted, then copy the **Web app URL**
+   (ends in `/exec`).
+6. Paste that URL into `CONFIG.DATA_URL` near the top of `index.html`, commit,
+   and push. The live site will start reading from the sheet on the next load.
 
-Re-deploy the script (Manage deployments → edit → Version: **New version**) after
-editing `Code.gs`. Adding a quarter tab needs no re-deploy.
+The endpoint also accepts `?quarter=2026_Q3` to scope to one quarter and
+`?debug=1` for a per-tab parse report (row counts, skipped rows, unrecognised
+headers) — handy for checking a new tab before trusting it. Header matching is
+case- and punctuation-insensitive, so `New Members`, `new_members` and
+`NEW-MEMBERS` all land in the same field.
+
+Re-deploy the script (Manage deployments → edit deployment → Version:
+**New version**) after editing `Code.gs`. Adding a quarter tab needs no
+re-deploy — the dashboard picks it up on the next page load.
 
 ## Accessibility & design notes
 

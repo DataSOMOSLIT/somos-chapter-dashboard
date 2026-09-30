@@ -43,8 +43,13 @@
  *   GET  <exec-url>?debug=1        → adds a per-tab parse report
  */
 
-/** Spreadsheet ID. Leave "" when this script is bound to the sheet itself. */
-var SHEET_ID = '';
+/**
+ * Spreadsheet ID. Leave "" when this script is bound to the sheet itself
+ * (Master_Staging_Sheet -> Extensions -> Apps Script). Filled in with the
+ * Data Analytics Team's Master_Staging_Sheet:
+ * https://docs.google.com/spreadsheets/d/10XQuSuabCKKNJdWWH6XsASdzZ_nZpqZf18V-OclH1QM/edit
+ */
+var SHEET_ID = '10XQuSuabCKKNJdWWH6XsASdzZ_nZpqZf18V-OclH1QM';
 
 /** Tabs whose names look like quarters are read; everything else is skipped. */
 var QUARTER_TAB = /^(?:Q([1-4])[_\-\s]?(\d{4})|(\d{4})[_\-\s]?Q([1-4]))$/i;

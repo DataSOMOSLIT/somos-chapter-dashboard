@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -114,6 +114,18 @@
   .banner strong { display: block; margin-bottom: 2px; }
   .banner .glyph { flex: 0 0 auto; font-size: 15px; line-height: 1.35; }
   .banner ul { margin: 6px 0 0; padding-left: 18px; }
+
+  .countdown {
+    display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid var(--series-1); background: var(--surface);
+    border-radius: 999px; padding: 7px 14px; margin: 16px 0 0;
+    font-size: 13px;
+  }
+  .countdown-label { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .countdown-clock {
+    font-variant-numeric: tabular-nums; font-weight: 700; color: var(--series-1);
+    white-space: nowrap; letter-spacing: 0.02em;
+  }
 
   .sourcebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 0; font-size: 12px; color: var(--ink-2); }
   .chip {
@@ -277,6 +289,11 @@
         <button class="btn" id="copyLink" type="button"><span aria-hidden="true">&#128279;</span> Copy link to this view</button>
         <button class="btn" id="themeBtn" type="button" aria-label="Switch colour theme"><span aria-hidden="true">&#9686;</span> Theme</button>
       </div>
+    </div>
+
+    <div class="countdown">
+      <span class="countdown-label">&#128197; Dashboard Q3 is coming</span>
+      <span class="countdown-clock" id="countdownClock">&mdash;</span>
     </div>
 
     <div id="banner" hidden></div>
@@ -1072,6 +1089,30 @@ try {
   const saved = localStorage.getItem("slit-theme");
   if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
 } catch (e) {}
+
+/* ===================== "Q3 is coming" countdown ===================== */
+// Fixed target, not "N days from whenever this loads" - every visitor sees
+// the same clock. Recurring setTimeout rather than setInterval so a slow
+// tick can't stack up overlapping timers.
+const Q3_COUNTDOWN_TARGET = new Date("2026-10-05T00:00:00");
+function tickCountdown() {
+  const el = $("countdownClock");
+  if (el) {
+    const diff = Q3_COUNTDOWN_TARGET.getTime() - Date.now();
+    if (diff <= 0) {
+      el.textContent = "It's here!";
+    } else {
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      const pad = n => String(n).padStart(2, "0");
+      el.textContent = d + "d " + pad(h) + "h " + pad(m) + "m " + pad(s) + "s";
+    }
+  }
+  setTimeout(tickCountdown, 1000);
+}
+tickCountdown();
 
 /* ===================== boot ===================== */
 function renderSourceChip(loaded) {

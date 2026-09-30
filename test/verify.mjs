@@ -3,11 +3,16 @@
  *
  * Extracts the <script> block out of index.html, runs it in a fresh VM context
  * against a minimal DOM stub, and asserts the data rules, the source-fallback
- * chain, the aggregations, the sorting and the URL state all hold against
- * data/kpis.json — whose Q2 2026 rows are copied verbatim from a real
- * KPIs_Consolidado export and whose Q1 2026 rows are real events/attendance
- * from that same export's unique_events tab (see the README's note on
- * data/kpis.json for what's real vs. genuinely unavailable).
+ * chain, the aggregations, the sorting and the URL state all hold.
+ *
+ * data/kpis.json currently holds exactly one real quarter (Q2 2026, exported
+ * verbatim from KPIs_Historico via Consolidation.gs's exportKpisJson() — see
+ * its own _comment field) — every chapter reports real numbers for every
+ * metric that quarter, so there are no nulls and no quarter-over-quarter
+ * delta to exercise against it. Sections that need a second quarter or
+ * missing values use a clearly-labelled SYNTHETIC dataset instead, so this
+ * suite doesn't silently lose coverage as the real file grows one quarter at
+ * a time, and doesn't need editing when Q3 lands in data/kpis.json.
  *
  *   node test/verify.mjs      # exits non-zero on the first failing check
  *
@@ -134,38 +139,36 @@ const servesNothing = () => { throw new Error("network down"); };
 
 /* ====================================================================== */
 
-console.log("1. Source resolution (API absent → data/kpis.json)");
+console.log("1. Source resolution (API absent → data/kpis.json, one real quarter)");
 const A = await boot({ fetchImpl: servesJSON(kpis) });
 eq("fetched data/kpis.json", A.calls.join(","), "data/kpis.json");
 eq("source chip", A.txt("srcText"), "Static · data/kpis.json");
 ok("chip reports a static snapshot", A.txt("srcMeta").includes("static snapshot"));
 ok("chip counts rows/quarters/chapters",
-  A.txt("srcMeta").includes("12 rows · 2 quarters · 6 chapters"), A.txt("srcMeta"));
+  A.txt("srcMeta").includes("6 rows · 1 quarter · 6 chapters"), A.txt("srcMeta"));
 
 console.log("\n2. Controls built from the data");
-eq("quarter options", A.kids("quarterSel").map(o => o.textContent).join("|"), "Q1 2026|Q2 2026");
-eq("defaults to latest quarter", A.byId.get("quarterSel").value, "2026_Q2");
+eq("quarter options", A.kids("quarterSel").map(o => o.textContent).join("|"), "Q2 2026");
+eq("defaults to the only quarter", A.byId.get("quarterSel").value, "2026_Q2");
 eq("rank metric options", A.kids("rankSel").length, 9);
 eq("chapter summary", A.txt("chapSummary"), "All chapters (6)");
 eq("chapter checkboxes", A.byId.get("chapPanel").querySelectorAll('input[type="checkbox"]').length, 6);
 
-console.log("\n3. Hero + stat tiles (Q2 2026, all chapters — real KPIs_Consolidado numbers)");
+console.log("\n3. Hero + stat tiles (real Q2 2026 numbers, no prior quarter to compare)");
 let cards = A.kids("cards");
 eq("one hero + 3 tiles", cards.length, 4);
 ok("hero is the hero", cards[0].className.includes("hero"));
 eq("hero label", cards[0].children[0].textContent, "Selected metric · Total attendance");
 // Montreal 50 + Toronto 175 + Vancouver 16 + Ottawa 8 + Calgary 41 + Canada 176 = 466
 eq("hero value = 466", cards[0].children[1].textContent, "466");
-ok("hero delta is up vs Q1", cards[0].children[2].className.includes("up") &&
-  cards[0].children[2].textContent.includes("vs Q1 2026"), cards[0].children[2].textContent);
-// Q1 attendance (Canada had no events that quarter): 39+38+12+14+17 = 120 -> (466-120)/120 = +288.3%
-eq("hero delta amount", cards[0].children[2].children[1].textContent, "+288.3%");
+eq("no prior quarter → delta says so, not a computed %",
+  cards[0].children[2].textContent, "No Q1 2026 data to compare");
 eq("events tile", cards[1].children[1].textContent, "11");                 // 3+3+1+1+2+1
 eq("new LI followers tile", cards[2].children[1].textContent, "514");      // 63+157+35+43+26+190
 eq("LI engagement tile (weighted by total LI followers)", cards[3].children[1].textContent, "17.2%");
 eq("weighted note on rate tile", cards[3].children[2].textContent, "Weighted by total LinkedIn followers.");
 
-console.log("\n4. Ranked bars — Q2 2026, all 6 chapters have real attendance (no N/A here)");
+console.log("\n4. Ranked bars — every chapter has real attendance (no N/A this quarter)");
 let bars = A.kids("bars");
 eq("6 bars for attendance", bars.length, 6);
 eq("leader is Canada (176, edges out Toronto's 175)", bars[0].children[0].textContent, "Canada");
@@ -176,67 +179,42 @@ ok("bars sorted descending",
       .every((v, i, a) => i === 0 || a[i - 1] >= v));
 eq("no missing-data note — every chapter reported attendance", A.byId.get("barsNote").hidden, true);
 
-console.log("\n5. Null handling — switch to Q1 2026, rank by largest_event (Canada ran no events that quarter)");
-A.byId.get("quarterSel").value = "2026_Q1";
-A.byId.get("quarterSel").fire("change");
-A.byId.get("rankSel").value = "largest_event";
-A.byId.get("rankSel").fire("change");
-bars = A.kids("bars");
-eq("5 bars, Canada left off", bars.length, 5);
-ok("note names Canada", A.txt("barsNote").includes("Canada"), A.txt("barsNote"));
-ok("note says N/A in the table", A.txt("barsNote").includes("N/A in the table"));
-eq("largest single event leader is Toronto (38)", bars[0].children[0].textContent, "Toronto");
-eq("max aggregation, not sum", bars[0].children[1].children[1].textContent, "38");
-
-console.log("\n6. Table (still Q1 2026) — sorting, N/A, totals");
+console.log("\n5. Table — sorting and totals on the real (null-free) Q2 data");
 let body = A.kids("bodyRows");
 eq("6 table rows", body.length, 6);
-const canada = body.find(tr => tr.children[0].textContent === "Canada");
-eq("Canada events = N/A (no events that quarter)", A.cell(canada, 1), "N/A");
-eq("Canada attendance = N/A", A.cell(canada, 2), "N/A");
-eq("Canada largest_event = N/A", A.cell(canada, 4), "N/A");
-ok("N/A cells are muted, not zero", canada.children[1].className.includes("na"));
-eq("Canada LI engagement = N/A (Q1 has no LinkedIn export in this snapshot)", A.cell(canada, 8), "N/A");
-const montreal = body.find(tr => tr.children[0].textContent === "Montreal");
-eq("Montreal (real events) is also N/A for LI engagement in Q1", A.cell(montreal, 8), "N/A");
-eq("...but has real event numbers", A.cell(montreal, 2), "39");
+eq("no cell is N/A this quarter", body.every(tr => !tr.children.some(td => td.className?.includes?.("na"))), true);
 const head = A.kids("headRow");
 eq("1 label + 9 metric columns", head.length, 10);
 eq("column order", head.map(h => h.children[0].textContent).join("|"),
   "Chapter|Events|Attendance|Avg / event|Largest event|New LI|Total LI|Impressions|LI engmt.|LI posts");
-eq("default sort is attendance desc", body[0].children[0].textContent, "Montreal");
-head[3].fire("click");                                   // avg_attendance, desc
+eq("default sort is attendance desc, Canada leads", body[0].children[0].textContent, "Canada");
+head[8].fire("click");                                    // li_engagement_rate, desc
 body = A.kids("bodyRows");
-eq("avg_attendance desc leader", body[0].children[0].textContent, "Toronto");
-eq("null sorts last on desc", body[5].children[0].textContent, "Canada");
-A.kids("headRow")[3].fire("click");                       // toggle to asc
-body = A.kids("bodyRows");
-eq("avg_attendance asc leader", body[0].children[0].textContent, "Vancouver");
-eq("null still sorts last on asc", body[5].children[0].textContent, "Canada");
-A.kids("headRow")[0].fire("click");                      // chapter asc
+eq("li_engagement_rate desc leader is Montreal (18.51%)", body[0].children[0].textContent, "Montreal");
+A.kids("headRow")[0].fire("click");                       // chapter asc
 body = A.kids("bodyRows");
 eq("chapter asc first", body[0].children[0].textContent, "Calgary");
 eq("chapter asc last", body[5].children[0].textContent, "Vancouver");
 let foot = A.kids("footRow");
 eq("footer label", foot[0].textContent, "All selected (6)");
-eq("footer attendance total", foot[2].textContent, "120");
-eq("footer largest_event is max, not sum", foot[4].textContent, "38");
-eq("footer avg_attendance ratio (Σattendance/Σevents, Canada excluded)", foot[3].textContent, "20.0");
-eq("footer LI columns all N/A in Q1", foot[8].textContent, "N/A");
+eq("footer attendance total", foot[2].textContent, "466");
+eq("footer largest_event is max, not sum", foot[4].textContent, "176");
+// avg_attendance ratio: Σattendance/Σevents = 466/11 = 42.4
+eq("footer avg_attendance ratio", foot[3].textContent, "42.4");
 
-console.log("\n7. URL state round-trips");
-eq("URL after section 5-6's interactions",
-  A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q1&rank=largest_event&sort=chapter&dir=asc");
+console.log("\n6. URL state round-trips (chapter subset + rank/sort changes)");
+ok("URL reflects section 5's sort", /sort=chapter/.test(A.sandbox.location.href), A.sandbox.location.href);
 const boxes = A.byId.get("chapPanel").querySelectorAll('input[type="checkbox"]');
-for (const b of boxes) b.checked = ["montreal", "toronto", "ottawa"].includes(b.value);
+for (const b of boxes) b.checked = ["montreal", "toronto", "canada"].includes(b.value);
 boxes[0].fire("change");
-ok("ch appears with a subset", /ch=montreal%2Cottawa%2Ctoronto/.test(A.sandbox.location.href),
+ok("ch appears with a subset", /ch=canada%2Cmontreal%2Ctoronto/.test(A.sandbox.location.href),
   A.sandbox.location.href);
 eq("summary reflects subset", A.txt("chapSummary"), "3 of 6 chapters");
 eq("3 table rows", A.kids("bodyRows").length, 3);
-eq("footer recomputed for subset (Montreal 39 + Toronto 38 + Ottawa 14)", A.kids("footRow")[2].textContent, "91");
+eq("footer recomputed for subset (Montreal 50 + Toronto 175 + Canada 176)",
+  A.kids("footRow")[2].textContent, "401");
 
-console.log("\n8. Empty selection degrades cleanly");
+console.log("\n7. Empty selection degrades cleanly");
 for (const b of boxes) b.checked = false;
 boxes[0].fire("change");
 eq("summary", A.txt("chapSummary"), "No chapters");
@@ -245,14 +223,14 @@ eq("hero is N/A", A.kids("cards")[0].children[1].textContent, "N/A");
 ok("hero N/A is muted", A.kids("cards")[0].children[1].className.includes("na"));
 eq("bars empty state", A.kids("bars")[0].textContent, "No chapters selected.");
 
-console.log("\n9. Reset returns to defaults");
+console.log("\n8. Reset returns to defaults");
 A.byId.get("resetBtn").fire("click");
-eq("quarter reset to latest", A.byId.get("quarterSel").value, "2026_Q2");
+eq("quarter reset to the only quarter", A.byId.get("quarterSel").value, "2026_Q2");
 eq("chapters reset", A.txt("chapSummary"), "All chapters (6)");
 eq("clean URL", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q2");
 eq("banner hidden — real Q2 engagement rates are all well under 1", A.byId.get("banner").hidden, true);
 
-console.log("\n10. Data rule: li_engagement_rate > 1 raises the banner");
+console.log("\n9. Data rule: li_engagement_rate > 1 raises the banner");
 {
   const bad = JSON.parse(JSON.stringify(kpis));
   bad.rows.find(r => r.chapter === "Montreal" && r.quarter === "2026_Q2").li_engagement_rate = 4.6;
@@ -267,18 +245,83 @@ console.log("\n10. Data rule: li_engagement_rate > 1 raises the banner");
     B.kids("bodyRows").find(tr => tr.children[0].textContent === "Montreal").children[8].textContent === "460.0%");
 }
 
-console.log("\n11. URL deep-link is honoured on load (Q2 2026, real per-chapter engagement rates)");
+console.log("\n10. SYNTHETIC two-quarter dataset — null handling, quarter-over-quarter delta");
+console.log("    (data/kpis.json only has one real quarter; this dataset is invented purely");
+console.log("     to exercise logic paths a single quarter can't: nulls, deltas, null-last sort)");
 {
+  const synthetic = {
+    generated_at: "2026-09-30T00:00:00Z",
+    rows: [
+      // Q1: plausible events-only figures, no LinkedIn data, Canada ran no events.
+      { quarter: "2026_Q1", chapter: "Montreal",  events: 2, attendance: 39, largest_event: 21, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      { quarter: "2026_Q1", chapter: "Toronto",   events: 1, attendance: 38, largest_event: 38, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      { quarter: "2026_Q1", chapter: "Vancouver", events: 1, attendance: 12, largest_event: 12, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      { quarter: "2026_Q1", chapter: "Ottawa",    events: 1, attendance: 14, largest_event: 14, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      { quarter: "2026_Q1", chapter: "Calgary",   events: 1, attendance: 17, largest_event: 17, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      { quarter: "2026_Q1", chapter: "Canada",    events: null, attendance: null, largest_event: null, new_li_followers: null, total_li_followers: null, li_engagement_rate: null },
+      // Q2: the real, verified numbers from data/kpis.json.
+      ...kpis.rows
+    ]
+  };
+  const S = await boot({ fetchImpl: servesJSON(synthetic) });
+
+  S.byId.get("quarterSel").value = "2026_Q1";
+  S.byId.get("quarterSel").fire("change");
+  S.byId.get("rankSel").value = "largest_event";
+  S.byId.get("rankSel").fire("change");
+  let sBars = S.kids("bars");
+  eq("Q1: 5 bars, Canada left off (no events that quarter)", sBars.length, 5);
+  ok("note names Canada", S.txt("barsNote").includes("Canada"), S.txt("barsNote"));
+  ok("note says N/A in the table", S.txt("barsNote").includes("N/A in the table"));
+  eq("largest single event leader is Toronto (38)", sBars[0].children[0].textContent, "Toronto");
+  eq("max aggregation, not sum", sBars[0].children[1].children[1].textContent, "38");
+
+  let sBody = S.kids("bodyRows");
+  const sCanada = sBody.find(tr => tr.children[0].textContent === "Canada");
+  eq("Canada events = N/A", S.cell(sCanada, 1), "N/A");
+  eq("Canada largest_event = N/A", S.cell(sCanada, 4), "N/A");
+  ok("N/A cells are muted, not zero", sCanada.children[1].className.includes("na"));
+
+  const sHead = S.kids("headRow");
+  sHead[3].fire("click");                                 // avg_attendance desc
+  sBody = S.kids("bodyRows");
+  eq("avg_attendance desc leader is Toronto (38.0)", sBody[0].children[0].textContent, "Toronto");
+  eq("null sorts last on desc", sBody[5].children[0].textContent, "Canada");
+  S.kids("headRow")[3].fire("click");                      // toggle asc
+  sBody = S.kids("bodyRows");
+  eq("avg_attendance asc leader is Vancouver (12.0)", sBody[0].children[0].textContent, "Vancouver");
+  eq("null still sorts last on asc", sBody[5].children[0].textContent, "Canada");
+
+  S.byId.get("quarterSel").value = "2026_Q2";
+  S.byId.get("quarterSel").fire("change");
+  S.byId.get("rankSel").value = "attendance";
+  S.byId.get("rankSel").fire("change");
+  const heroCard = S.kids("cards")[0];
+  ok("Q2 hero delta is up vs a real prior quarter now",
+    heroCard.children[2].className.includes("up") && heroCard.children[2].textContent.includes("vs Q1 2026"),
+    heroCard.children[2].textContent);
+  // Q1 attendance 39+38+12+14+17=120 (Canada null) -> Q2 466 -> (466-120)/120 = +288.3%
+  eq("delta amount matches Q1→Q2 growth", heroCard.children[2].children[1].textContent, "+288.3%");
+}
+
+console.log("\n11. URL deep-link is honoured on load (synthetic 2-quarter dataset)");
+{
+  const synthetic2 = { generated_at: "2026-09-30T00:00:00Z", rows: [
+    { quarter: "2026_Q1", chapter: "Montreal", li_engagement_rate: null, total_li_followers: null },
+    { quarter: "2026_Q1", chapter: "Toronto",  li_engagement_rate: null, total_li_followers: null },
+    { quarter: "2026_Q1", chapter: "Vancouver",li_engagement_rate: null, total_li_followers: null },
+    ...kpis.rows
+  ]};
   const C = await boot({
     search: "?q=2026_Q2&ch=montreal,toronto,vancouver&rank=li_engagement_rate&sort=li_engagement_rate&dir=asc",
-    fetchImpl: servesJSON(kpis)
+    fetchImpl: servesJSON(synthetic2)
   });
   eq("quarter from URL", C.byId.get("quarterSel").value, "2026_Q2");
   eq("rank metric from URL", C.byId.get("rankSel").value, "li_engagement_rate");
   eq("chapters from URL", C.txt("chapSummary"), "3 of 6 chapters");
   eq("hero follows rank metric", C.kids("cards")[0].children[0].textContent,
     "Selected metric · LinkedIn engagement rate");
-  eq("delta vs Q1 is N/A (Q1 has no LinkedIn data for these 3 chapters, not 'no prior quarter')",
+  eq("delta vs Q1 is N/A (Q1 exists but has no LinkedIn data for these 3 chapters)",
     C.kids("cards")[0].children[3].textContent, "Change vs Q1 2026: N/A");
   eq("3 bars", C.kids("bars").length, 3);
   eq("bars always rank desc regardless of table dir — leader is Montreal (18.5%)",
@@ -293,7 +336,7 @@ console.log("\n12. Stale / junk URL parameters are ignored");
     search: "?q=1999_Q9&ch=atlantis,montreal&rank=bogus&sort=nope&dir=sideways",
     fetchImpl: servesJSON(kpis)
   });
-  eq("bad quarter → latest", D.byId.get("quarterSel").value, "2026_Q2");
+  eq("bad quarter → the only real one", D.byId.get("quarterSel").value, "2026_Q2");
   eq("bad rank → default", D.byId.get("rankSel").value, "attendance");
   eq("unknown chapter dropped", D.txt("chapSummary"), "Montreal");
   eq("one bar", D.kids("bars").length, 1);

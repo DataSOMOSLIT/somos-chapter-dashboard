@@ -13,7 +13,7 @@ Interactive dashboard for chapter KPIs, hosted on GitHub Pages.
 Same look as the Data Analytics Team's `SOMOS_Dashboard_Generator.html`
 (Power BI style, dark): a period selector and a **"Compare with"** selector
 in the top bar, one page per
-chapter (Montréal, Toronto, Vancouver, Ottawa, Calgary, Red Nacional =
+chapter (Montréal, Toronto, Vancouver, Ottawa, Calgary, Canada (National) =
 `Canada`), and a **Comparison** page.
 
 A quarter is shown **on its own** by default — no deltas, no comparison. Pick

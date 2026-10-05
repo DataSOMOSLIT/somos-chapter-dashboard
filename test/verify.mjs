@@ -165,7 +165,7 @@ eq("no comparison by default", A.byId.get("vsSel").value, "");
 eq("tab order: KNOWN_ORDER, Canada last, then Comparison",
   tabs(A).map(t => t.dataset.view).join(","), "montreal,toronto,vancouver,ottawa,calgary,canada,cmp");
 ok("Montreal shown as Montréal", tabs(A)[0].innerHTML.includes("Montréal"));
-ok("Canada shown as Red Nacional", tabs(A)[5].innerHTML.includes("Red Nacional"));
+ok("Canada shown as Canada (National)", tabs(A)[5].innerHTML.includes("Canada (National)"));
 ok("first chapter tab is active", tabs(A)[0].className.includes("active"));
 ok("period chip in the tab strip", A.kids("tabs").at(-1).innerHTML.includes("Q3 2026 · Jul – Sep"));
 eq("URL records quarter + page", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q3&view=montreal");
@@ -203,9 +203,9 @@ lacks("share panel replaced", A, "Share of Network");
 has("legend lists both quarters", A, "Q2 2026</span>");
 has("attendance quarter-over-quarter insight", A, "Attendance down 69.7%</strong> vs Q2 2026 (175 → 53)");
 
-console.log("\n4. Chapter page — Red Nacional (Canada), two events");
+console.log("\n4. Chapter page — Canada (National), two events");
 clickTab(A, "canada");
-has("display name in the title", A, "Red Nacional <span>Chapter</span>");
+has("display name in the title", A, "Canada (National) <span>Chapter</span>");
 has("attendance leader badge (91)", A, "Attendance Leader");
 has("largest event", A, "Career Momentum: Staying Ready Between Opportunities");
 has("everything else combined: 1 other event, 91 − 59 = 32", A, "1 other event</div>");
@@ -224,9 +224,9 @@ has("largest single event is a max, not a sum", A, ">59</div>");
 eq("one mini card per chapter", (canvas(A).match(/class="cmp-mini"/g) || []).length, 6);
 has("clustered bar chart", A, "Attendees and new LinkedIn followers by chapter");
 has("engagement bar for Toronto", A, ">25.2%</div>");
-has("network insight: attendance leader", A, "Red Nacional leads in attendees</strong> (91, avg 45.5/event)");
+has("network insight: attendance leader", A, "Canada (National) leads in attendees</strong> (91, avg 45.5/event)");
 has("network insight: engagement leader", A, "Toronto leads in engagement</strong> — 25.2%");
-has("network insight: lowest engagement", A, "Red Nacional has the lowest engagement</strong> (10.1%)");
+has("network insight: lowest engagement", A, "Canada (National) has the lowest engagement</strong> (10.1%)");
 has("network insight: quarter over quarter", A, "Network attendance down 42.5%</strong> vs Q2 2026 (351 → 202)");
 
 console.log("\n6. Switching to Q2 2026 — the first quarter on record");

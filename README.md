@@ -8,29 +8,35 @@ Interactive dashboard for chapter KPIs, hosted on GitHub Pages.
 
 ---
 
-## Filters
+## Layout
 
-Quarter, chapters (any combination), and the metric used to rank chapters. The
-table sorts by any column. Every filtered view has its own URL, so
-**"Copy link to this view"** can be shared in Slack.
+Same look as the Data Analytics Team's `SOMOS_Dashboard_Generator.html`
+(Power BI style, dark): a period selector in the top bar, one page per
+chapter (Montréal, Toronto, Vancouver, Ottawa, Calgary, Red Nacional =
+`Canada`), and a **Comparison** page.
+
+- **Chapter page:** five KPI cards with change vs the previous quarter,
+  ① events this period (largest event + the rest combined), ② quarter over
+  quarter, ③ LinkedIn period metrics, ④ engagement-rate gauge, and
+  rule-based insights.
+- **Comparison page:** network totals with change vs the previous quarter, one
+  mini card per chapter, attendees vs new LinkedIn followers, engagement rate
+  by chapter, and network insights.
+
+The generator's event timeline and in-person/online donut need `unique_events`
+(attendee-level data, never published), so this page shows the largest-event
+highlight and the quarter-over-quarter trend in their place.
+
+Every view has its own URL, so **"Copy link"** can be shared in Slack:
 
 | Parameter | Meaning | Example |
 |---|---|---|
-| `q` | Quarter | `?q=2026_Q2` |
-| `ch` | Chapter slugs, comma-separated. Omitted when all are selected. | `?ch=montreal,toronto,ottawa` |
-| `rank` | Metric the chart ranks by | `?rank=li_engagement_rate` |
-| `sort` | Table sort column (`chapter` or any metric key) | `?sort=attendance` |
-| `dir` | `asc` or `desc` | `?dir=asc` |
-
-Example shareable view — Q2 2026, three chapters, ranked by LinkedIn engagement rate:
+| `q` | Quarter (defaults to the latest) | `?q=2026_Q2` |
+| `view` | Chapter slug or `cmp` (defaults to the first chapter) | `?view=toronto` |
 
 ```
-https://datasomoslit.github.io/somos-chapter-dashboard/?q=2026_Q2&ch=montreal,toronto,ottawa&rank=li_engagement_rate
+https://datasomoslit.github.io/somos-chapter-dashboard/?q=2026_Q3&view=cmp
 ```
-
-Unknown or stale parameters are ignored rather than breaking the view: a chapter
-slug that no longer exists is dropped, and an unrecognised quarter falls back to
-the most recent one in the data.
 
 ## Data sources (in this order)
 
@@ -129,24 +135,22 @@ the live feed connected, add rows with the new `"quarter"` value to
   exports this as a whole-number percentage instead — a value above 1 trips a
   warning banner naming the offending chapters rather than being silently
   reinterpreted.
-- Missing values are `null` and show as **N/A**, never zero. A chapter with no
-  value for the ranking metric is left off the chart (with a note saying which)
-  and still appears as N/A in the table.
+- Missing values are `null` and show as **N/A**, never zero.
 - **`Canada` is a real chapter, not just the national LinkedIn account** — it
   hosts its own events (verified against `unique_events`: e.g. "Behind the
-  Curtain of Hiring", 176 attendees, Q2 2026) alongside carrying the national
+  Curtain of Hiring", Q2 2026) alongside carrying the national
   LinkedIn numbers. A quarter where it happens to run no events still shows
   N/A for its event columns, same as any other chapter — that's normal
   missing-data handling, not a permanent rule about this chapter.
 - `li_engagement_rate` aggregates as a mean **weighted by total LinkedIn
   followers**, not a plain average, so a chapter with a small following
   doesn't swing the headline figure as much as one with a large one.
-- `largest_event` aggregates as a **max** across the selected chapters, not a
+- `largest_event` aggregates as a **max** across chapters, not a
   sum — it answers "what's the single biggest event," not "how many people
   attended the biggest events combined."
-- `avg_attendance` (attendance ÷ events) is derived and not stored; the table
-  computes it per chapter, and the footer computes it as one ratio
-  (Σattendance ÷ Σevents) across every selected chapter — not an average of
+- `avg_attendance` (attendance ÷ events) is derived and not stored; it is
+  computed per chapter, and the network average is one ratio
+  (Σattendance ÷ Σevents) across chapters — not an average of
   the per-chapter ratios, so a handful of small chapters can't outweigh a
   single large one.
 
@@ -160,7 +164,7 @@ the live feed connected, add rows with the new `"quarter"` value to
 | `attendance` | Total Attendees | integer |
 | `avg_attendance` | *(derived: Total Attendees ÷ Events Held)* | decimal, 1dp |
 | `largest_event` | Largest Event (Attendees) | integer |
-| `largest_event_name` | Largest Event Name | text (carried through the feed; not yet shown in the UI) |
+| `largest_event_name` | Largest Event Name | text |
 | `new_li_followers` | New LinkedIn Followers | integer |
 | `total_li_followers` | Total LinkedIn Followers | integer |
 | `li_impressions` | LinkedIn Impressions | integer |
@@ -187,7 +191,7 @@ python -m http.server 8000
 ```
 
 Opening `index.html` straight off disk still works — it just falls through to the
-embedded Q2 2026 copy, because the `data/kpis.json` fetch is blocked.
+embedded Q2–Q3 2026 copy, because the `data/kpis.json` fetch is blocked.
 
 ## Tests
 
@@ -200,8 +204,8 @@ No dependencies and no browser. The suite pulls the `<script>` block out of
 easy to break silently: the source-fallback chain, null handling (N/A, never
 zero — a chapter with events but no LinkedIn export yet, or vice versa), the
 `li_engagement_rate > 1` banner, followers-weighted rate aggregation, the
-`largest_event` max aggregation, null-last sorting in both directions, URL
-round-tripping, and tolerance for `Q2_2026` / `2026-Q2` / `"4.6%"` / a
+`largest_event` max aggregation, quarter-over-quarter deltas, chapter page
+order and names, HTML escaping of event names, URL round-tripping, and tolerance for `Q2_2026` / `2026-Q2` / `"4.6%"` / a
 capitalised `Period` header coming out of Sheets, and the CSV parser (quoted
 commas in event names, doubled-quote escaping, CRLF/LF line endings). Run it
 after editing `index.html`, `data/kpis.json`, or the metric registry.
@@ -330,24 +334,13 @@ changes.
 
 ## Accessibility & design notes
 
-- Light and dark themes are both explicitly designed; the toggle beats the OS
-  setting in either direction and the choice persists in `localStorage`.
-- The chart is a single-series ranked bar list: one hue for every bar, value
-  labelled at each bar's tip, so nothing is encoded by colour alone. The table is
-  the chart's table-view twin — every value in the chart is readable without
-  hovering.
-- Bar rows are keyboard-focusable and show the same tooltip on focus as on hover.
-  Table headers sort with Enter or Space.
-- The categorical palette was validated for colour-vision deficiency and contrast
-  against both surfaces before shipping.
+- Dark only, matching the generator's palette and per-chapter colours.
+- Every chart value is also printed as text (bar labels, mini cards), so
+  nothing depends on colour or hovering alone.
+- Text from the data (chapter and event names) is HTML-escaped before rendering.
+- Page tabs, the period selector and "Copy link" are native buttons/selects
+  and work from the keyboard; the tab strip scrolls sideways on phones.
 
-> **Note on `data/kpis.json`.** Its Q2 2026 rows are copied verbatim from a
-> real `KPIs_Consolidado` export (2026-09-30) — not invented numbers. Its Q1
-> 2026 rows are real events/attendance computed from that same export's
-> `unique_events` tab; Q1's LinkedIn columns are `null` because that export
-> only carried one quarter of consolidated LinkedIn numbers, not because the
-> chapters had none. Either way, it's a **static snapshot**, not a live feed —
-> the source chip says so. Point `CONFIG.DATA_URL` at the deployed
-> `DashboardFeed.gs` web app (see **Apps Script setup**) so the dashboard
-> reads `KPIs_Historico` live before sharing the link outside the Data
-> Analytics Team.
+> **Note on `data/kpis.json`.** It holds the real `exportKpisJson()` output
+> (Q2 + Q3 2026, exported 2026-10-04) — a static snapshot refreshed by hand
+> each quarter (see **Updating `data/kpis.json` each quarter**), not a live feed.

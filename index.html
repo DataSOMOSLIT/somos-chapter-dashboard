@@ -1,378 +1,280 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SOMOS Latinx in Tech · Chapter Performance Dashboard</title>
 <meta name="description" content="Interactive dashboard for SOMOS Latinx in Tech chapter KPIs.">
+<!--
+  Visual design mirrors SOMOS_Dashboard_Generator.html (the Data Analytics
+  Team's Power BI style report): one page per chapter plus a Comparison page.
+  Unlike the generator, this page reads the aggregated KPIs_Historico export
+  (data/kpis.json) - never unique_events, which carries attendee-level data -
+  so the generator's event timeline and in-person/online donut are replaced by
+  the largest-event highlight and a quarter-over-quarter trend.
+-->
 <style>
-  /* ---------------------------------------------------------------------
-     Design tokens. Light values live on bare :root; the dark values are
-     declared twice - once for the OS setting, once for the theme toggle -
-     so the toggle wins in both directions.
-     --------------------------------------------------------------------- */
   :root {
-    color-scheme: light;
-    --plane:        #f9f9f7;
-    --surface:      #fcfcfb;
-    --ink:          #0b0b0b;
-    --ink-2:        #52514e;
-    --ink-muted:    #898781;
-    --grid:         #e1e0d9;
-    --axis:         #c3c2b7;
-    --ring:         rgba(11,11,11,0.10);
-    --series-1:     #2a78d6;
-    --series-1-hi:  #3987e5;
-    --deemph:       #e1e0d9;
-    --good:         #0ca30c;
-    --good-text:    #006300;
-    --warning:      #fab219;
-    --critical:     #d03b3b;
-    --warn-wash:    #fdf4de;
-    --hover-wash:   rgba(11,11,11,0.035);
-    --radius:       10px;
-    --font:         system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --plane:      #0d0d0d;
-      --surface:    #1a1a19;
-      --ink:        #ffffff;
-      --ink-2:      #c3c2b7;
-      --ink-muted:  #898781;
-      --grid:       #2c2c2a;
-      --axis:       #383835;
-      --ring:       rgba(255,255,255,0.10);
-      --series-1:   #3987e5;
-      --series-1-hi:#5598e7;
-      --deemph:     #383835;
-      --good:       #0ca30c;
-      --good-text:  #0ca30c;
-      --warning:    #fab219;
-      --critical:   #d03b3b;
-      --warn-wash:  #2a2410;
-      --hover-wash: rgba(255,255,255,0.05);
-    }
-  }
-  :root[data-theme="dark"] {
     color-scheme: dark;
-    --plane:      #0d0d0d;
-    --surface:    #1a1a19;
-    --ink:        #ffffff;
-    --ink-2:      #c3c2b7;
-    --ink-muted:  #898781;
-    --grid:       #2c2c2a;
-    --axis:       #383835;
-    --ring:       rgba(255,255,255,0.10);
-    --series-1:   #3987e5;
-    --series-1-hi:#5598e7;
-    --deemph:     #383835;
-    --good:       #0ca30c;
-    --good-text:  #0ca30c;
-    --warning:    #fab219;
-    --critical:   #d03b3b;
-    --warn-wash:  #2a2410;
-    --hover-wash: rgba(255,255,255,0.05);
+    --canvas:   #000000;
+    --white:    #1A1A1A;
+    --ink:      #F3F2F1;
+    --mid:      #A19F9D;
+    --light:    #605E5C;
+    --line:     rgba(255,255,255,0.09);
+    --line2:    rgba(255,255,255,0.07);
+    --pbi-blue: #118DFF;
+    --green:    #107C10;
+    --green-tx: #3FBF3F;
+    --red-tx:   #F1707A;
+    --r: 4px;
+    --shadow: 0 2px 8px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
   }
 
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body {
-    background: var(--plane);
-    color: var(--ink);
-    font: 14px/1.5 var(--font);
-    -webkit-font-smoothing: antialiased;
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--canvas); color: var(--ink); font-size: 13px; }
+
+  /* ── PBI TOPBAR ── */
+  .pbi-bar {
+    background: #201F1E;
+    min-height: 40px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    padding: 4px 14px;
+    position: sticky; top: 0; z-index: 200;
   }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
-  a { color: var(--series-1); }
-
-  /* ---- header ---- */
-  .masthead { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
-  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); margin: 0 0 6px; }
-  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
-  .owner { margin: 0; color: var(--ink-2); font-size: 13px; }
-  .owner code { font-size: 12px; color: var(--ink-2); }
-
-  .btn {
-    font: inherit; font-size: 13px; color: var(--ink);
-    background: var(--surface); border: 1px solid var(--ring);
-    border-radius: 8px; padding: 7px 12px; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  .pbi-left { display: flex; align-items: center; gap: 12px; }
+  .pbi-logo { display: flex; align-items: center; gap: 6px; }
+  .pbi-logo svg { width: 18px; height: 18px; }
+  .pbi-logo-text { color: #F3F2F1; font-size: 13px; font-weight: 600; letter-spacing: -.2px; }
+  .pbi-sep { width: 1px; height: 20px; background: rgba(255,255,255,.15); }
+  .pbi-report-name { color: #C8C6C4; font-size: 12px; }
+  .pbi-right { display: flex; align-items: center; gap: 8px; }
+  .pbi-btn { background: none; border: 1px solid rgba(255,255,255,.2); color: #C8C6C4; font-size: 11px; padding: 3px 10px; border-radius: 2px; cursor: pointer; font-family: inherit; }
+  .pbi-btn:hover { background: rgba(255,255,255,.08); }
+  .pbi-select {
+    background: #111111; border: 1px solid rgba(255,255,255,.2); color: #C8C6C4;
+    font-size: 11px; padding: 3px 8px; border-radius: 2px; font-family: inherit; cursor: pointer;
   }
-  .btn:hover { background: var(--hover-wash); }
-  .btn:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
-  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pbi-btn:focus-visible, .pbi-select:focus-visible, .pbi-page-tab:focus-visible { outline: 2px solid var(--pbi-blue); outline-offset: 1px; }
 
-  /* ---- banners & notes ---- */
+  /* ── PBI PAGE TABS ── */
+  .pbi-pages {
+    background: #111111;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line2);
+    display: flex; align-items: stretch;
+    padding: 0 14px; gap: 0;
+    position: sticky; top: 40px; z-index: 199;
+    overflow-x: auto;
+  }
+  .pbi-page-tab {
+    padding: 0 16px; height: 34px; font-size: 12px; color: var(--mid);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; transition: all .12s;
+    font-family: inherit;
+    background: none; border-left: none; border-right: none; border-top: none;
+  }
+  .pbi-page-tab:hover { color: var(--ink); background: #222222; }
+  .pbi-page-tab.active { color: var(--ink); border-bottom-color: var(--pbi-blue); font-weight: 600; }
+  .tab-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .pbi-filter-bar {
+    margin-left: auto; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--light); padding: 0 4px 0 16px; white-space: nowrap;
+  }
+  .filter-chip {
+    background: #0D1B2A; border: 1px solid rgba(17,141,255,0.3); color: var(--pbi-blue);
+    font-size: 10px; padding: 2px 8px; border-radius: 2px;
+  }
+
+  /* ── CANVAS ── */
+  .canvas { padding: 14px 16px 24px; }
+  .loading { color: var(--mid); padding: 40px 0; text-align: center; }
+
+  /* ── TITLE CARD ── */
+  .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .page-title { font-size: 20px; font-weight: 700; color: #F3F2F1; letter-spacing: -.3px; line-height: 1; }
+  .page-title span { color: var(--pbi-blue); }
+  .page-subtitle { font-size: 11px; color: var(--mid); margin-top: 3px; }
+  .period-chip {
+    background: #1A1A1A; border: 1px solid var(--line);
+    font-size: 11px; color: var(--mid); padding: 4px 10px; border-radius: 2px;
+    box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .period-chip::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--pbi-blue); display:block; }
+
+  /* ── KPI CARDS ── */
+  .kpi-strip, .net-kpi { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 12px; }
+  .kpi-card {
+    background: var(--white); border-radius: var(--r);
+    box-shadow: var(--shadow); padding: 14px 16px;
+    border-top: 3px solid var(--cc, var(--pbi-blue));
+    position: relative;
+  }
+  .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--mid); margin-bottom: 6px; }
+  .kpi-value { font-size: 28px; font-weight: 700; line-height: 1; color: #F3F2F1; }
+  .kpi-value.accent { color: var(--cc, var(--pbi-blue)); }
+  .kpi-value.green  { color: var(--green); }
+  .kpi-value.gray   { color: var(--light); font-size: 18px; }
+  .kpi-note { font-size: 10px; color: var(--light); margin-top: 4px; }
+  .kpi-delta { font-size: 10px; margin-top: 4px; font-weight: 600; color: var(--mid); }
+  .kpi-delta.up   { color: var(--green-tx); }
+  .kpi-delta.down { color: var(--red-tx); }
+
+  /* ── CHART GRID ── */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .vis { background: var(--white); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; min-width: 0; }
+  .vis-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--mid); margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .vis-title-tag {
+    background: rgba(255,255,255,0.07); font-size: 9px; color: var(--light);
+    padding: 1px 6px; border-radius: 2px; font-weight: 400;
+    text-transform: none; letter-spacing: 0; white-space: nowrap;
+  }
+  .vis-empty { font-size: 12px; color: var(--light); padding: 20px 0; text-align: center; line-height: 1.6; }
+
+  /* ── HIGHLIGHTS (timeline style) ── */
+  .tl { display: flex; flex-direction: column; }
+  .tl-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line2); }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-date { font-size: 10px; color: var(--light); min-width: 36px; padding-top: 2px; }
+  .tl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+  .tl-info { flex: 1; min-width: 0; }
+  .tl-name { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .tl-tag { display: inline-block; font-size: 9px; background: rgba(255,255,255,0.07); color: var(--mid); padding: 1px 5px; border-radius: 2px; margin-top: 3px; }
+  .tl-att { font-size: 18px; font-weight: 700; min-width: 30px; text-align: right; }
+  .tl-att-lbl { font-size: 9px; color: var(--light); text-align: right; }
+  .tl-footer { display: flex; justify-content: space-between; font-size: 11px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .tl-footer-lbl { color: var(--mid); }
+  .tl-footer-val { font-weight: 700; }
+
+  /* ── HORIZONTAL BARS ── */
+  .hbar { display: flex; flex-direction: column; gap: 8px; }
+  .hb-row { display: flex; align-items: center; gap: 8px; }
+  .hb-lbl { font-size: 11px; color: var(--mid); min-width: 96px; }
+  .hb-track { flex: 1; height: 16px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .hb-fill { height: 100%; border-radius: 2px; display: flex; align-items: center; padding-right: 5px; justify-content: flex-end; }
+  .hb-text { font-size: 9px; font-weight: 700; color: white; }
+  .hb-val { font-size: 11px; color: var(--mid); min-width: 46px; text-align: right; font-weight: 600; }
+
+  /* ── QUARTER TREND ── */
+  .qt { display: flex; flex-direction: column; gap: 10px; }
+  .qt-group-lbl { font-size: 10px; color: var(--mid); font-weight: 600; margin-bottom: 3px; }
+  .qt-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .qt-q { font-size: 9px; color: var(--light); min-width: 22px; }
+  .qt-track { flex: 1; height: 10px; }
+  .qt-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+  .qt-val { font-size: 11px; color: var(--ink); min-width: 46px; text-align: right; font-weight: 600; }
+  .legend-row { display: flex; gap: 16px; margin-top: 10px; font-size: 10px; color: var(--mid); flex-wrap: wrap; }
+  .legend-row span { display: flex; align-items: center; gap: 4px; }
+  .legend-row i { width: 10px; height: 10px; display: inline-block; border-radius: 1px; }
+
+  /* ── GAUGE ── */
+  .gauge-body { display: flex; flex-direction: column; align-items: center; }
+  .gauge-body svg { width: 100%; max-width: 220px; height: auto; display: block; }
+  .gauge-num { font-size: 32px; font-weight: 700; color: var(--ink); margin-top: -2px; }
+  .gauge-lbl { font-size: 10px; color: var(--light); text-transform: uppercase; letter-spacing: .08em; }
+  .gauge-sub { font-size: 11px; color: var(--mid); margin-top: 6px; }
+
+  /* ── INSIGHTS ── */
+  .insights-card {
+    background: #0D1B2A; border: 1px solid rgba(17,141,255,0.3); border-left: 3px solid var(--pbi-blue);
+    border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px;
+  }
+  .ins-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--pbi-blue); margin-bottom: 10px; }
+  .ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); column-gap: 16px; }
+  .ins-row { display: flex; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line2); }
+  .ins-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .ins-text { font-size: 11px; color: #A8C4E0; line-height: 1.55; }
+  .ins-text strong { color: #F3F2F1; }
+
+  /* ── COMPARE PAGE ── */
+  .cmp-mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 12px; }
+  .cmp-mini { background: var(--white); border-radius: var(--r); box-shadow: var(--shadow); padding: 12px 14px; border-top: 3px solid var(--cc); }
+  .cmp-mini-name { font-size: 11px; font-weight: 700; color: var(--cc); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .cmp-row { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--line2); }
+  .cmp-row:last-child { border-bottom: none; }
+  .cmp-lbl { color: var(--mid); }
+  .cmp-val { font-weight: 700; color: #F3F2F1; }
+  .cmp-val.na { color: var(--light); font-weight: 400; }
+  .cmp-val.green { color: var(--green-tx); }
+  .cmp-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .cmp-charts svg { width: 100%; height: auto; display: block; }
+  .eng-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .eng-lbl { font-size: 10px; color: var(--mid); font-weight: 600; min-width: 80px; }
+  .eng-track { flex: 1; height: 22px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+  .eng-fill { height: 100%; border-radius: 2px; display: flex; align-items: center; justify-content: flex-end; padding-right: 5px; font-size: 10px; font-weight: 700; color: white; }
+
+  /* ── BANNER / FOOTER / TOAST ── */
   .banner {
-    display: flex; gap: 10px; align-items: flex-start;
-    border: 1px solid var(--warning); background: var(--warn-wash);
-    border-radius: var(--radius); padding: 12px 14px; margin: 16px 0 0;
-    font-size: 13px; color: var(--ink);
+    margin: 12px 16px 0; display: flex; gap: 10px; background: #2A1214; border: 1px solid rgba(232,17,35,.35);
+    color: #F1948A; font-size: 12px; padding: 10px 12px; border-radius: var(--r); line-height: 1.5;
   }
-  .banner strong { display: block; margin-bottom: 2px; }
-  .banner .glyph { flex: 0 0 auto; font-size: 15px; line-height: 1.35; }
-  .banner ul { margin: 6px 0 0; padding-left: 18px; }
-
-  .countdown {
-    display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    border: 1px solid var(--series-1); background: var(--surface);
-    border-radius: 999px; padding: 7px 14px; margin: 16px 0 0;
-    font-size: 13px;
-  }
-  .countdown-label { color: var(--ink); font-weight: 600; white-space: nowrap; }
-  .countdown-clock {
-    font-variant-numeric: tabular-nums; font-weight: 700; color: var(--series-1);
-    white-space: nowrap; letter-spacing: 0.02em;
-  }
-
-  .sourcebar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 0; font-size: 12px; color: var(--ink-2); }
-  .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    border: 1px solid var(--ring); border-radius: 999px;
-    padding: 4px 10px; background: var(--surface);
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: 0 0 auto; }
-  .dot.live { background: var(--good); }
-  .dot.static { background: var(--series-1); }
-  .dot.embedded { background: var(--warning); }
-
-  /* ---- filter row: one row, above everything it scopes ---- */
-  .filters {
-    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
-    margin: 20px 0 0; padding: 16px; background: var(--surface);
-    border: 1px solid var(--ring); border-radius: var(--radius);
-  }
-  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .field > label, .field > .flabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
-  select {
-    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
-    border: 1px solid var(--ring); border-radius: 8px; padding: 7px 10px; min-width: 190px;
-  }
-  select:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
-  .filters .spacer { flex: 1 1 auto; }
-
-  /* chapters combobox */
-  details.combo { position: relative; }
-  details.combo > summary {
-    list-style: none; cursor: pointer; font-size: 13px;
-    background: var(--surface); border: 1px solid var(--ring); border-radius: 8px;
-    padding: 7px 10px; min-width: 230px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  }
-  details.combo > summary::-webkit-details-marker { display: none; }
-  details.combo > summary:hover { background: var(--hover-wash); }
-  details.combo > summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
-  details.combo > summary .caret { color: var(--ink-muted); font-size: 10px; }
-  .combo-panel {
-    position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 280px;
-    background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius);
-    box-shadow: 0 10px 28px rgba(0,0,0,.14); padding: 6px; max-height: 340px; overflow: auto;
-  }
-  .combo-panel .opt {
-    display: flex; align-items: center; gap: 9px; padding: 7px 9px;
-    border-radius: 7px; cursor: pointer; font-size: 13px; min-height: 32px;
-  }
-  .combo-panel .opt:hover { background: var(--hover-wash); }
-  .combo-foot { display: flex; gap: 8px; padding: 8px 9px 4px; margin-top: 4px; border-top: 1px solid var(--grid); }
-  .linkish { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--series-1); cursor: pointer; }
-  .linkish:hover { text-decoration: underline; }
-
-  /* ---- hero + stat tiles ---- */
-  main.is-loading { opacity: .45; transition: opacity .15s ease; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 20px; }
-  .card {
-    background: var(--surface); border: 1px solid var(--ring);
-    border-radius: var(--radius); padding: 16px;
-  }
-  .hero { grid-column: 1 / -1; }
-  @media (min-width: 900px) { .hero { grid-column: span 2; } }
-  .tile-label { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
-  .hero-value { font-size: 52px; line-height: 1.02; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
-  .tile-value { font-size: 28px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
-  .na { color: var(--ink-muted); font-weight: 500; }
-  .delta { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
-  .delta .arrow { font-size: 11px; }
-  .delta.up   .arrow, .delta.up   .amt { color: var(--good-text); }
-  .delta.down .arrow, .delta.down .amt { color: var(--critical); }
-  .delta .amt { font-weight: 600; }
-  .hint { font-size: 12px; color: var(--ink-muted); margin: 8px 0 0; }
-
-  /* ---- section cards ---- */
-  section.panel {
-    background: var(--surface); border: 1px solid var(--ring);
-    border-radius: var(--radius); padding: 18px; margin-top: 20px;
-  }
-  .panel-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-  h2 { font-size: 15px; font-weight: 600; margin: 0; }
-  .sub { font-size: 12px; color: var(--ink-muted); margin: 2px 0 0; }
-
-  /* ---- ranked bars ---- */
-  .bars { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
-  .bar-row {
-    display: grid; grid-template-columns: minmax(96px, 168px) 1fr; gap: 14px;
-    align-items: center; min-height: 34px; padding: 3px 6px; border-radius: 7px;
-    cursor: default;
-  }
-  .bar-row:hover, .bar-row:focus-visible { background: var(--hover-wash); outline: none; }
-  .bar-row:focus-visible { box-shadow: inset 0 0 0 2px var(--series-1); }
-  .bar-name { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-track { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .bar-fill {
-    height: 18px; background: var(--series-1);
-    border-radius: 0 4px 4px 0; flex: 0 0 auto; min-width: 2px;
-    transition: width .18s ease, background-color .12s ease;
-  }
-  .bar-row:hover .bar-fill, .bar-row:focus-visible .bar-fill { background: var(--series-1-hi); }
-  .bar-val { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
-  .bar-baseline { border-left: 1px solid var(--axis); }
-  .bar-empty { font-size: 13px; color: var(--ink-muted); padding: 10px 6px; }
-
-  /* ---- tooltip ---- */
-  #tip {
-    position: fixed; z-index: 60; pointer-events: none; opacity: 0;
-    transform: translate(-50%, -100%); transition: opacity .1s ease;
-    background: var(--surface); border: 1px solid var(--ring); border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px 10px; max-width: 260px;
-  }
-  #tip[data-open="1"] { opacity: 1; }
-  #tip .tv { font-size: 15px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
-  #tip .key { width: 12px; height: 2px; border-radius: 1px; background: var(--series-1); flex: 0 0 auto; }
-  #tip .tl { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
-
-  /* ---- table ---- */
-  .tablewrap { overflow-x: auto; margin-top: 14px; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
-  thead th {
-    position: relative; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--ink-muted); font-weight: 600; border-bottom: 1px solid var(--axis);
-    cursor: pointer; user-select: none;
-  }
-  thead th:hover { color: var(--ink); }
-  thead th:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
-  thead th[aria-sort] { color: var(--ink); }
-  thead th .sortmark { margin-left: 5px; font-size: 9px; color: var(--ink-muted); }
-  thead th[aria-sort] .sortmark { color: var(--series-1); }
-  tbody td { font-variant-numeric: tabular-nums; color: var(--ink); }
-  tbody tr:hover td { background: var(--hover-wash); }
-  tbody tr:hover td:first-child { background: var(--hover-wash); }
-  tfoot td { font-weight: 600; border-top: 1px solid var(--axis); border-bottom: 0; background: var(--surface); }
-
-  footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--grid); font-size: 12px; color: var(--ink-muted); }
-  footer p { margin: 0 0 6px; }
-  .sr {
-    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
+  .banner strong { color: #F3F2F1; }
+  .banner ul { margin: 4px 0 0 18px; }
+  .foot { padding: 0 16px 24px; font-size: 10px; color: var(--light); line-height: 1.7; }
+  .foot .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mid); margin-right: 5px; vertical-align: middle; }
+  .foot .dot.live { background: var(--green-tx); }
+  .foot .dot.embedded { background: #F2C94C; }
+  .foot #srcText { color: var(--mid); font-weight: 600; }
+  .foot code { font-family: inherit; color: var(--mid); }
   .toast {
-    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
-    background: var(--ink); color: var(--plane); font-size: 13px;
-    padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .18s ease;
-    pointer-events: none; z-index: 70;
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: #F3F2F1; color: #111; font-size: 12px; padding: 8px 14px; border-radius: var(--r);
+    opacity: 0; transition: opacity .18s ease; pointer-events: none; z-index: 300;
   }
   .toast[data-open="1"] { opacity: .96; }
+
+  @media (max-width: 900px) {
+    .kpi-strip, .net-kpi { grid-template-columns: repeat(2,1fr); }
+    .chart-grid, .cmp-charts { grid-template-columns: 1fr; }
+    .pbi-filter-bar { display: none; }
+  }
+  @media (max-width: 480px) {
+    .pbi-report-name, .pbi-sep { display: none; }
+    .kpi-value { font-size: 22px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
-    <div class="masthead">
-      <div>
-        <p class="eyebrow">SOMOS Latinx in Tech</p>
-        <h1>Chapter Performance Dashboard</h1>
-        <p class="owner">Code ownership: Data Analytics Team · <code id="ownerEmail">laura.lugo@somoslatinxintech.com</code></p>
-      </div>
-      <div class="btn-row">
-        <button class="btn" id="copyLink" type="button"><span aria-hidden="true">&#128279;</span> Copy link to this view</button>
-        <button class="btn" id="themeBtn" type="button" aria-label="Switch colour theme"><span aria-hidden="true">&#9686;</span> Theme</button>
-      </div>
+<!-- PBI TOP BAR -->
+<header class="pbi-bar">
+  <div class="pbi-left">
+    <div class="pbi-logo">
+      <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <rect x="0" y="10" width="4" height="8" rx="1" fill="#F2C94C"/>
+        <rect x="7" y="6"  width="4" height="12" rx="1" fill="#F2C94C" opacity=".85"/>
+        <rect x="14" y="2" width="4" height="16" rx="1" fill="#F2C94C" opacity=".7"/>
+      </svg>
+      <span class="pbi-logo-text">SOMOS</span>
     </div>
-
-    <div class="countdown">
-      <span class="countdown-label">&#128197; Dashboard Q3 is coming</span>
-      <span class="countdown-clock" id="countdownClock">&mdash;</span>
-    </div>
-
-    <div id="banner" hidden></div>
-
-    <div class="sourcebar">
-      <span class="chip"><span class="dot" id="srcDot"></span><span id="srcText">Loading data&hellip;</span></span>
-      <span id="srcMeta"></span>
-    </div>
-  </header>
-
-  <!-- Filters: one row, above everything they scope. -->
-  <div class="filters" role="group" aria-label="Dashboard filters">
-    <div class="field">
-      <label for="quarterSel">Quarter</label>
-      <select id="quarterSel"></select>
-    </div>
-
-    <div class="field">
-      <span class="flabel" id="chapLbl">Chapters</span>
-      <details class="combo" id="chapCombo">
-        <summary role="button" aria-labelledby="chapLbl" aria-expanded="false">
-          <span id="chapSummary">All chapters</span><span class="caret" aria-hidden="true">&#9660;</span>
-        </summary>
-        <div class="combo-panel" id="chapPanel"></div>
-      </details>
-    </div>
-
-    <div class="field">
-      <label for="rankSel">Rank chapters by</label>
-      <select id="rankSel"></select>
-    </div>
-
-    <span class="spacer"></span>
-
-    <div class="field">
-      <span class="flabel">&nbsp;</span>
-      <button class="btn" id="resetBtn" type="button">Reset filters</button>
-    </div>
+    <div class="pbi-sep"></div>
+    <span class="pbi-report-name">Chapter Performance</span>
   </div>
+  <div class="pbi-right">
+    <select class="pbi-select" id="quarterSel" aria-label="Period"></select>
+    <button class="pbi-btn" id="copyLink" type="button">Copy link</button>
+  </div>
+</header>
 
-  <main id="main" class="is-loading">
-    <div class="cards" id="cards"></div>
+<!-- PAGE TABS -->
+<nav class="pbi-pages" id="tabs" aria-label="Report pages"></nav>
 
-    <section class="panel" aria-labelledby="rankHead">
-      <div class="panel-head">
-        <div>
-          <h2 id="rankHead">Chapters ranked</h2>
-          <p class="sub" id="rankSub"></p>
-        </div>
-      </div>
-      <div class="bars" id="bars"></div>
-      <p class="hint" id="barsNote" hidden></p>
-    </section>
+<div id="banner" hidden></div>
 
-    <section class="panel" aria-labelledby="tableHead">
-      <div class="panel-head">
-        <div>
-          <h2 id="tableHead">All metrics</h2>
-          <p class="sub">Click any column header to sort. Missing values show as N/A, never zero.</p>
-        </div>
-      </div>
-      <div class="tablewrap">
-        <table id="kpiTable">
-          <caption class="sr">Chapter KPIs for the selected quarter and chapters</caption>
-          <thead><tr id="headRow"></tr></thead>
-          <tbody id="bodyRows"></tbody>
-          <tfoot><tr id="footRow"></tr></tfoot>
-        </table>
-      </div>
-    </section>
-  </main>
+<!-- CANVAS -->
+<main class="canvas" id="canvas"><p class="loading">Loading data&hellip;</p></main>
 
-  <footer>
-    <p>Data sources, in order: the Apps Script web app in <code>CONFIG.DATA_URL</code> (the DashboardFeed.gs endpoint, reading <code>KPIs_Historico</code> in Master_Staging_Sheet) &rarr; <code>data/kpis.json</code> &rarr; the embedded Q2 2026 copy in <code>index.html</code>.</p>
-    <p><code>li_engagement_rate</code> is a decimal (0.0185 = 1.85%). Values above 1 raise a warning banner. Missing values are <code>null</code> and render as N/A &mdash; a quarter with no LinkedIn export yet, or a chapter with no events that quarter, shows N/A rather than 0.</p>
-  </footer>
-</div>
+<footer class="foot">
+  <p><span class="dot" id="srcDot"></span><span id="srcText">Loading data&hellip;</span> · <span id="srcMeta"></span></p>
+  <p>Code ownership: Data Analytics Team · <code id="ownerEmail">laura.lugo@somoslatinxintech.com</code></p>
+</footer>
 
-<div id="tip" role="tooltip" aria-hidden="true"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -402,21 +304,26 @@ const CONFIG = {
 };
 
 /* =====================================================================
-   EMBEDDED FALLBACK - Q2 2026 only. Last resort when neither the API nor
-   data/kpis.json can be reached. These are the REAL Q2_2026 KPIs_Consolidado
-   values from an actual Master_Staging_Sheet export (2026-09-30) - not
-   invented placeholders, just a static, potentially stale copy.
+   EMBEDDED FALLBACK - last resort when neither the API nor data/kpis.json
+   can be reached. A static copy of the real 2026-10-04 exportKpisJson()
+   output (Q2 + Q3 2026) - not invented placeholders, just potentially stale.
    ===================================================================== */
 const EMBEDDED_KPIS = {
-  generated_at: "2026-09-30T21:00:00Z",
+  generated_at: "2026-10-04T04:29:09.876Z",
   sample: true,
   rows: [
-    { quarter:"2026_Q2", chapter:"Montreal",  events:3, attendance:50,  largest_event:22,  largest_event_name:"Latinx Unmuted",              new_li_followers:63,  total_li_followers:841,  li_impressions:6333,  li_engagement_rate:0.1851, li_posts:11 },
-    { quarter:"2026_Q2", chapter:"Toronto",   events:3, attendance:175, largest_event:76,  largest_event_name:"Side Project Showcase",       new_li_followers:157, total_li_followers:1230, li_impressions:16448, li_engagement_rate:0.1793, li_posts:21 },
-    { quarter:"2026_Q2", chapter:"Vancouver", events:1, attendance:16,  largest_event:16,  largest_event_name:"Latinx Unmuted",              new_li_followers:35,  total_li_followers:190,  li_impressions:2451,  li_engagement_rate:0.1394, li_posts:11 },
-    { quarter:"2026_Q2", chapter:"Ottawa",    events:1, attendance:8,   largest_event:8,   largest_event_name:"Latinx Unmuted",              new_li_followers:43,  total_li_followers:225,  li_impressions:3437,  li_engagement_rate:0.1744, li_posts:10 },
-    { quarter:"2026_Q2", chapter:"Calgary",   events:2, attendance:41,  largest_event:28,  largest_event_name:"Tamos Juntos Summer Social",  new_li_followers:26,  total_li_followers:106,  li_impressions:1277,  li_engagement_rate:0.0278, li_posts:7  },
-    { quarter:"2026_Q2", chapter:"Canada",    events:1, attendance:176, largest_event:176, largest_event_name:"Behind the Curtain of Hiring",new_li_followers:190, total_li_followers:375,  li_impressions:17266, li_engagement_rate:0.171,  li_posts:22 }
+    { quarter:"2026_Q3", chapter:"Montreal",  events:1, attendance:14,  largest_event:14,  largest_event_name:"Aquí Estamos: Summer Celebration",                     new_li_followers:42,  total_li_followers:871,  li_impressions:4031,  li_engagement_rate:0.1687, li_posts:9  },
+    { quarter:"2026_Q3", chapter:"Toronto",   events:1, attendance:53,  largest_event:53,  largest_event_name:"Somos Latinx in Tech Summer Soirée",                   new_li_followers:93,  total_li_followers:1287, li_impressions:6826,  li_engagement_rate:0.252,  li_posts:7  },
+    { quarter:"2026_Q3", chapter:"Vancouver", events:2, attendance:20,  largest_event:11,  largest_event_name:"Latinx After Office: Trivia Edition",                  new_li_followers:22,  total_li_followers:195,  li_impressions:2312,  li_engagement_rate:0.1676, li_posts:10 },
+    { quarter:"2026_Q3", chapter:"Ottawa",    events:1, attendance:9,   largest_event:9,   largest_event_name:"Spark Conexiones Ottawa",                              new_li_followers:31,  total_li_followers:244,  li_impressions:2890,  li_engagement_rate:0.1597, li_posts:8  },
+    { quarter:"2026_Q3", chapter:"Calgary",   events:1, attendance:15,  largest_event:15,  largest_event_name:"Conexiones Calgary: Beyond the Screen",                new_li_followers:16,  total_li_followers:117,  li_impressions:2067,  li_engagement_rate:0.1557, li_posts:10 },
+    { quarter:"2026_Q3", chapter:"Canada",    events:2, attendance:91,  largest_event:59,  largest_event_name:"Career Momentum: Staying Ready Between Opportunities", new_li_followers:127, total_li_followers:465,  li_impressions:14922, li_engagement_rate:0.1006, li_posts:21 },
+    { quarter:"2026_Q2", chapter:"Montreal",  events:3, attendance:44,  largest_event:22,  largest_event_name:"Latinx Unmuted",                                       new_li_followers:63,  total_li_followers:841,  li_impressions:6333,  li_engagement_rate:0.1851, li_posts:11 },
+    { quarter:"2026_Q2", chapter:"Toronto",   events:3, attendance:175, largest_event:76,  largest_event_name:"Side Project Showcase",                                new_li_followers:157, total_li_followers:1230, li_impressions:16448, li_engagement_rate:0.1793, li_posts:21 },
+    { quarter:"2026_Q2", chapter:"Vancouver", events:1, attendance:16,  largest_event:16,  largest_event_name:"Latinx Unmuted",                                       new_li_followers:35,  total_li_followers:190,  li_impressions:2451,  li_engagement_rate:0.1394, li_posts:11 },
+    { quarter:"2026_Q2", chapter:"Ottawa",    events:1, attendance:8,   largest_event:8,   largest_event_name:"Latinx Unmuted",                                       new_li_followers:43,  total_li_followers:225,  li_impressions:3437,  li_engagement_rate:0.1744, li_posts:10 },
+    { quarter:"2026_Q2", chapter:"Calgary",   events:2, attendance:41,  largest_event:28,  largest_event_name:"Tamos Juntos Summer Social",                           new_li_followers:26,  total_li_followers:106,  li_impressions:1277,  li_engagement_rate:0.0278, li_posts:7  },
+    { quarter:"2026_Q2", chapter:"Canada",    events:1, attendance:67,  largest_event:67,  largest_event_name:"Behind the Curtain of Hiring",                         new_li_followers:190, total_li_followers:375,  li_impressions:17266, li_engagement_rate:0.171,  li_posts:22 }
   ]
 };
 
@@ -437,8 +344,6 @@ const METRICS = [
   { key:"li_posts",           label:"LinkedIn posts published",  short:"LI posts",     fmt:"int",  agg:"sum" }
 ];
 const METRIC_BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
-const TILE_KEYS = ["events", "attendance", "new_li_followers", "li_engagement_rate"];
-const DEFAULTS = { rank: "attendance", sort: "attendance", dir: "desc" };
 
 /* ===================== helpers ===================== */
 const $ = id => document.getElementById(id);
@@ -479,44 +384,6 @@ function fmt(value, kind) {
   if (kind === "dec1") return value.toFixed(1);
   return Math.round(value).toLocaleString("en-US");
 }
-function setValue(el, value, kind) {
-  const text = fmt(value, kind);
-  el.textContent = text === null ? "N/A" : text;
-  el.classList.toggle("na", text === null);
-}
-
-/* ===================== state <-> URL ===================== */
-const state = { quarter: null, chapters: null, rank: DEFAULTS.rank, sort: DEFAULTS.sort, dir: DEFAULTS.dir };
-let DATA = { rows: [], quarters: [], chapters: [], source: null, sample: false, generated_at: null };
-
-function readURL() {
-  const p = new URLSearchParams(location.search);
-  const q = p.get("q");
-  if (q) state.quarter = normQuarter(q);
-  const ch = p.get("ch");
-  if (ch !== null) state.chapters = ch === "" ? [] : ch.split(",").map(s => s.trim()).filter(Boolean);
-  const rank = p.get("rank");
-  if (rank && METRIC_BY_KEY[rank]) state.rank = rank;
-  const sort = p.get("sort");
-  if (sort && (sort === "chapter" || METRIC_BY_KEY[sort])) state.sort = sort;
-  const dir = p.get("dir");
-  if (dir === "asc" || dir === "desc") state.dir = dir;
-}
-
-function writeURL() {
-  const p = new URLSearchParams();
-  if (state.quarter) p.set("q", state.quarter);
-  // Omit `ch` when every chapter is selected - shorter, shareable "all" link.
-  const allSlugs = DATA.chapters.map(c => c.slug);
-  const sel = state.chapters || allSlugs;
-  if (sel.length !== allSlugs.length) p.set("ch", sel.join(","));
-  if (state.rank !== DEFAULTS.rank) p.set("rank", state.rank);
-  if (state.sort !== DEFAULTS.sort) p.set("sort", state.sort);
-  if (state.dir !== DEFAULTS.dir) p.set("dir", state.dir);
-  const qs = p.toString();
-  history.replaceState(null, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
-}
-
 /* ===================== data loading ===================== */
 function normalizeRows(raw) {
   const out = [];
@@ -660,7 +527,7 @@ async function loadData() {
   }
   return {
     rows: normalizeRows(EMBEDDED_KPIS.rows),
-    source: "Embedded fallback · Q2 2026",
+    source: "Embedded fallback · Q2–Q3 2026",
     kind: "embedded",
     sample: true,
     generated_at: EMBEDDED_KPIS.generated_at,
@@ -733,259 +600,441 @@ function aggregate(rows, metric) {
   return seen ? sum : null;
 }
 
-/* ===================== rendering ===================== */
-function selectedSlugs() { return state.chapters || DATA.chapters.map(c => c.slug); }
-function rowsFor(quarter) {
-  const sel = new Set(selectedSlugs());
-  return DATA.rows.filter(r => r.quarter === quarter && sel.has(r.chapterSlug));
+/* ===================== chapters: colours, names, order =====================
+   Same palette, display names and tab order as SOMOS_Dashboard_Generator.html. */
+const CHAPTER_COLORS = {
+  montreal: "#118DFF", toronto: "#12239E", vancouver: "#E66C37",
+  ottawa: "#6B007B", calgary: "#E044A7", canada: "#744EC2"
+};
+const CHAPTER_DISPLAY_NAME = { montreal: "Montréal", canada: "Red Nacional" };
+const KNOWN_ORDER = ["montreal", "toronto", "vancouver", "ottawa", "calgary"];
+const FALLBACK_COLORS = ["#00B7C3", "#B4A0FF", "#00CC6A", "#FF8C00", "#C239B3"];
+
+function chapterSort(a, b) {
+  if (a.slug === "canada") return 1;
+  if (b.slug === "canada") return -1;
+  const ia = KNOWN_ORDER.indexOf(a.slug), ib = KNOWN_ORDER.indexOf(b.slug);
+  if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
 }
 
-function renderCards() {
-  const cards = $("cards");
-  cards.textContent = "";
-  const current = rowsFor(state.quarter);
-  const prevQ = previousQuarter(state.quarter);
-  const prev = DATA.quarters.includes(prevQ) ? rowsFor(prevQ) : null;
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const intFmt = v => v === null || v === undefined ? "N/A" : Math.round(v).toLocaleString("en-US");
+const pctFmt = v => v === null || v === undefined ? "N/A" : (v * 100).toFixed(1) + "%";
+const dec1 = v => v === null || v === undefined ? "N/A" : (Math.round(v * 10) / 10).toString();
 
-  const tile = (metricKey, isHero) => {
-    const m = METRIC_BY_KEY[metricKey];
-    const card = document.createElement("div");
-    card.className = "card" + (isHero ? " hero" : "");
-
-    const label = document.createElement("p");
-    label.className = "tile-label";
-    label.textContent = isHero ? "Selected metric · " + m.label : m.label;
-
-    const value = document.createElement("p");
-    value.className = isHero ? "hero-value" : "tile-value";
-    const now = aggregate(current, m);
-    setValue(value, now, m.fmt);
-    card.append(label, value);
-
-    if (m.agg === "wmean") {
-      const note = document.createElement("p");
-      note.className = "hint";
-      note.textContent = "Weighted by total LinkedIn followers.";
-      card.append(note);
-    } else if (m.agg === "max") {
-      const note = document.createElement("p");
-      note.className = "hint";
-      note.textContent = "Largest single event, not a sum.";
-      card.append(note);
-    }
-
-    const delta = document.createElement("p");
-    delta.className = "delta";
-    if (!prev) {
-      delta.textContent = "No " + (prevQ ? quarterLabel(prevQ) : "prior quarter") + " data to compare";
-    } else {
-      const before = aggregate(prev, m);
-      if (now === null || before === null || before === 0) {
-        delta.textContent = "Change vs " + quarterLabel(prevQ) + ": N/A";
-      } else {
-        const diff = now - before;
-        const pct = (diff / Math.abs(before)) * 100;
-        const up = diff > 0, flat = Math.abs(pct) < 0.05;
-        delta.classList.add(flat ? "flat" : up ? "up" : "down");
-        const arrow = document.createElement("span");
-        arrow.className = "arrow"; arrow.setAttribute("aria-hidden", "true");
-        arrow.textContent = flat ? "→" : up ? "▲" : "▼";
-        const amt = document.createElement("span");
-        amt.className = "amt";
-        amt.textContent = (diff > 0 ? "+" : diff < 0 ? "−" : "") + Math.abs(pct).toFixed(1) + "%";
-        const tail = document.createElement("span");
-        tail.textContent = (flat ? "flat" : up ? "up" : "down") + " vs " + quarterLabel(prevQ);
-        delta.append(arrow, amt, tail);
-      }
-    }
-    card.append(delta);
-    return card;
-  };
-
-  // Exactly one hero figure per view: the metric the reader chose to rank by.
-  cards.append(tile(state.rank, true));
-  for (const k of TILE_KEYS) if (k !== state.rank) cards.append(tile(k, false));
+function periodLabel(q) {
+  const m = String(q).match(/^(\d{4})_Q([1-4])$/);
+  if (!m) return String(q);
+  const ranges = { 1: "Jan – Mar", 2: "Apr – Jun", 3: "Jul – Sep", 4: "Oct – Dec" };
+  return "Q" + m[2] + " " + m[1] + " · " + ranges[m[2]];
 }
 
-const tip = $("tip");
-function showTip(x, y, value, label) {
-  tip.textContent = "";
-  const v = document.createElement("div"); v.className = "tv";
-  const key = document.createElement("span"); key.className = "key"; key.setAttribute("aria-hidden", "true");
-  const vt = document.createElement("span"); vt.textContent = value;
-  v.append(key, vt);
-  const l = document.createElement("div"); l.className = "tl"; l.textContent = label;   // untrusted labels
-  tip.append(v, l);
-  tip.style.left = Math.min(Math.max(x, 90), window.innerWidth - 90) + "px";
-  tip.style.top = Math.max(y - 12, 56) + "px";
-  tip.dataset.open = "1";
+/* ===================== state <-> URL ===================== */
+const CMP = "cmp";
+const state = { quarter: null, view: null };
+let DATA = { rows: [], quarters: [], chapters: [] };
+
+function readURL() {
+  const p = new URLSearchParams(location.search);
+  const q = p.get("q");
+  if (q) state.quarter = normQuarter(q);
+  const v = p.get("view");
+  if (v) state.view = slug(v);
 }
-function hideTip() { tip.dataset.open = "0"; }
 
-function renderBars() {
-  const m = METRIC_BY_KEY[state.rank];
-  const wrap = $("bars");
-  wrap.textContent = "";
-  $("rankSub").textContent = m.label + " · " + quarterLabel(state.quarter) +
-    " · " + selectedSlugs().length + " of " + DATA.chapters.length + " chapters";
+function writeURL() {
+  const p = new URLSearchParams();
+  if (state.quarter) p.set("q", state.quarter);
+  if (state.view) p.set("view", state.view);
+  history.replaceState(null, "", location.pathname + "?" + p.toString() + location.hash);
+}
 
-  const rows = rowsFor(state.quarter);
-  const withValue = rows.filter(r => r[m.key] !== null).sort((a, b) => b[m.key] - a[m.key]);
-  const missingRows = rows.filter(r => r[m.key] === null);
+/* ===================== data access ===================== */
+const rowsFor = q => DATA.rows.filter(r => r.quarter === q);
+const rowOf = (chapterSlug, q) => DATA.rows.find(r => r.quarter === q && r.chapterSlug === chapterSlug) || null;
+const chaptersIn = q => DATA.chapters.filter(c => rowOf(c.slug, q));
+// The previous quarter, only if the data actually has it.
+function prevQuarterOf(q) {
+  const p = previousQuarter(q);
+  return DATA.quarters.includes(p) ? p : null;
+}
 
-  const note = $("barsNote");
-  if (missingRows.length) {
-    note.hidden = false;
-    note.textContent = missingRows.length + " chapter" + (missingRows.length > 1 ? "s" : "") +
-      " not charted — no " + m.label.toLowerCase() + " reported: " +
-      missingRows.map(r => r.chapter).join(", ") + ". Still listed as N/A in the table below.";
-  } else { note.hidden = true; }
-
-  if (!withValue.length) {
-    const p = document.createElement("p");
-    p.className = "bar-empty";
-    p.textContent = rows.length ? "No values reported for this metric in the selected quarter." : "No chapters selected.";
-    wrap.append(p);
-    return;
+/* ===================== small render helpers ===================== */
+// Change vs the previous quarter. Rates compare in percentage points, counts in %.
+function deltaHTML(now, before, kind, prevQ) {
+  if (!prevQ) return "";
+  const vs = " vs " + quarterLabel(prevQ);
+  if (now === null || now === undefined || before === null || before === undefined) {
+    return '<div class="kpi-delta">Change' + vs + ": N/A</div>";
   }
+  let diff, text;
+  if (kind === "pct") {
+    diff = (now - before) * 100;
+    text = Math.abs(diff).toFixed(1) + " pts";
+  } else {
+    if (before === 0) return '<div class="kpi-delta">Change' + vs + ": N/A</div>";
+    diff = (now - before) / Math.abs(before) * 100;
+    text = Math.abs(diff).toFixed(1) + "%";
+  }
+  const flat = Math.abs(diff) < 0.05;
+  const cls = flat ? "flat" : diff > 0 ? "up" : "down";
+  const arrow = flat ? "→" : diff > 0 ? "▲" : "▼";
+  const sign = flat ? "" : diff > 0 ? "+" : "−";
+  return '<div class="kpi-delta ' + cls + '">' + arrow + " " + sign + text + vs + "</div>";
+}
 
-  const max = withValue[0][m.key];
-  for (const r of withValue) {
-    const row = document.createElement("div");
-    row.className = "bar-row";
-    row.tabIndex = 0;
-    const shown = fmt(r[m.key], m.fmt);
-    row.setAttribute("aria-label", r.chapter + ": " + shown + " " + m.label.toLowerCase());
+function kpiCard(o) {
+  return '<div class="kpi-card" style="--cc:' + o.color + '">' +
+    '<div class="kpi-label">' + o.label + "</div>" +
+    '<div class="' + o.cls + '"' + (o.style ? ' style="' + o.style + '"' : "") + ">" + o.value + "</div>" +
+    '<div class="kpi-note">' + (o.note || "") + "</div>" + (o.delta || "") + "</div>";
+}
 
-    const name = document.createElement("div");
-    name.className = "bar-name"; name.textContent = r.chapter; name.title = r.chapter;
+function titleRow(title, accent, sub) {
+  return '<div class="title-row"><div>' +
+    '<div class="page-title">' + esc(title) + " <span>" + accent + "</span></div>" +
+    '<div class="page-subtitle">' + sub + "</div></div>" +
+    '<div class="period-chip">' + periodLabel(state.quarter) + "</div></div>";
+}
 
-    const track = document.createElement("div");
-    track.className = "bar-track bar-baseline";
-    const fill = document.createElement("div");
-    fill.className = "bar-fill";
-    // Cap at 82% so the tip label always has room and is never clipped.
-    fill.style.width = (max > 0 ? (r[m.key] / max) * 82 : 0).toFixed(2) + "%";
-    const val = document.createElement("div");
-    val.className = "bar-val"; val.textContent = shown;
-    track.append(fill, val);
+function insightsVis(items) {
+  return '<div class="insights-card"><div class="ins-head">⚡ Insights</div><div class="ins-grid">' +
+    items.map(i => '<div class="ins-row"><div class="ins-icon" aria-hidden="true">' + i.i +
+      '</div><div class="ins-text">' + i.t + "</div></div>").join("") + "</div></div>";
+}
 
-    row.append(name, track);
-    const label = r.chapter + " · " + quarterLabel(r.quarter) + " · " + m.label;
-    row.addEventListener("pointermove", e => showTip(e.clientX, e.clientY, shown, label));
-    row.addEventListener("pointerleave", hideTip);
-    row.addEventListener("focus", () => {
-      const b = row.getBoundingClientRect();
-      showTip(b.left + 140, b.top, shown, label);
+/* ===================== rule-based insights (no hand-written text) ===================== */
+function attendanceLeader(rows) {
+  return rows.filter(r => r.attendance !== null).reduce((a, b) => (!a || b.attendance > a.attendance ? b : a), null);
+}
+function engagementExtremes(rows) {
+  const withEng = rows.filter(r => r.li_engagement_rate !== null);
+  if (!withEng.length) return { top: null, low: null };
+  return {
+    top: withEng.reduce((a, b) => (b.li_engagement_rate > a.li_engagement_rate ? b : a)),
+    low: withEng.reduce((a, b) => (b.li_engagement_rate < a.li_engagement_rate ? b : a))
+  };
+}
+
+function chapterBadge(row, rows) {
+  const lead = attendanceLeader(rows);
+  const { top, low } = engagementExtremes(rows);
+  if (lead && lead.chapterSlug === row.chapterSlug) return "Attendance Leader";
+  if (top && top.chapterSlug === row.chapterSlug) return "Engagement Leader";
+  if (low && low.chapterSlug === row.chapterSlug && rows.length > 1) return "Improvement Opportunity";
+  return "Active Chapter";
+}
+
+function chapterInsights(k, rows, prev, prevQ) {
+  const items = [];
+  if (k.largest_event_name && k.largest_event !== null) {
+    items.push({ i: "🏆", t: "<strong>Highest-attendance event:</strong> " + esc(k.largest_event_name) + " — " + intFmt(k.largest_event) + " attendees." });
+  } else if (!k.events) {
+    items.push({ i: "📭", t: "No events recorded in this period." });
+  }
+  if (k.li_posts) {
+    items.push({ i: "📣", t: "With <strong>" + intFmt(k.li_posts) + " posts published</strong> this period, average engagement was " + pctFmt(k.li_engagement_rate) + "." });
+  } else {
+    items.push({ i: "📡", t: "<strong>No LinkedIn posts tracked</strong> this period — the +" + intFmt(k.new_li_followers || 0) + " new followers came organically." });
+  }
+  const netAvg = aggregate(rows, "avg_attendance");
+  if (netAvg !== null && k.avg_attendance !== null) {
+    const cmp = k.avg_attendance >= netAvg ? "above" : "below";
+    items.push({ i: "💡", t: "The average of <strong>" + dec1(k.avg_attendance) + " attendees/event</strong> is " + cmp + " the network average (" + dec1(netAvg) + ")." });
+  }
+  if (prev && prev.attendance && k.attendance !== null) {
+    const ch = (k.attendance - prev.attendance) / prev.attendance * 100;
+    items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
+      quarterLabel(prevQ) + " (" + intFmt(prev.attendance) + " → " + intFmt(k.attendance) + ")." });
+  }
+  return items;
+}
+
+function networkInsights(rows, prevRows, prevQ) {
+  const items = [];
+  const name = r => esc(chapterBySlug(r.chapterSlug).label);
+  const lead = attendanceLeader(rows);
+  if (lead) {
+    items.push({ i: "🏆", t: "<strong>" + name(lead) + " leads in attendees</strong> (" + intFmt(lead.attendance) + ", avg " + dec1(lead.avg_attendance) + "/event) with " + intFmt(lead.events) + " event(s)." });
+  }
+  const { top, low } = engagementExtremes(rows);
+  if (top) {
+    items.push({ i: "📈", t: "<strong>" + name(top) + " leads in engagement</strong> — " + pctFmt(top.li_engagement_rate) + ", " + intFmt(top.li_posts || 0) + " posts, " + intFmt(top.li_impressions || 0) + " impressions." });
+    if (low && low.chapterSlug !== top.chapterSlug) {
+      items.push({ i: "⚠️", t: "<strong>" + name(low) + " has the lowest engagement</strong> (" + pctFmt(low.li_engagement_rate) + ") — worth reviewing content vs. audience fit." });
+    }
+  }
+  const withLargest = rows.filter(r => r.largest_event !== null);
+  if (withLargest.length) {
+    const big = withLargest.reduce((a, b) => (b.largest_event > a.largest_event ? b : a));
+    items.push({ i: "🌎", t: "<strong>" + name(big) + "</strong> holds the largest single event (" + intFmt(big.largest_event) + " attendees, \"" + esc(big.largest_event_name || "") + "\")." });
+  }
+  if (prevRows) {
+    const now = aggregate(rows, "attendance"), before = aggregate(prevRows, "attendance");
+    if (now !== null && before) {
+      const ch = (now - before) / before * 100;
+      items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Network attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
+        quarterLabel(prevQ) + " (" + intFmt(before) + " → " + intFmt(now) + ")." });
+    }
+  }
+  return items;
+}
+
+/* ===================== chapter page ===================== */
+function chapterBySlug(s) { return DATA.chapters.find(c => c.slug === s); }
+
+function chapterKpis(k, p, prevQ, c) {
+  return '<div class="kpi-strip">' +
+    kpiCard({ color: c, label: "Events Held", cls: "kpi-value accent", value: intFmt(k.events), note: "this period",
+      delta: deltaHTML(k.events, p && p.events, "int", prevQ) }) +
+    kpiCard({ color: c, label: "Total Attendees", cls: "kpi-value", value: intFmt(k.attendance),
+      note: k.avg_attendance !== null ? "~" + dec1(k.avg_attendance) + " per event" : "",
+      delta: deltaHTML(k.attendance, p && p.attendance, "int", prevQ) }) +
+    kpiCard({ color: c, label: "New LinkedIn Followers", cls: "kpi-value green", value: k.new_li_followers === null ? "N/A" : "+" + intFmt(k.new_li_followers),
+      note: "current total: " + intFmt(k.total_li_followers),
+      delta: deltaHTML(k.new_li_followers, p && p.new_li_followers, "int", prevQ) }) +
+    kpiCard({ color: c, label: "LinkedIn Impressions", cls: k.li_impressions === null ? "kpi-value gray" : "kpi-value", value: intFmt(k.li_impressions),
+      note: !k.li_posts ? "no posts tracked" : intFmt(k.li_posts) + " posts published",
+      delta: deltaHTML(k.li_impressions, p && p.li_impressions, "int", prevQ) }) +
+    kpiCard({ color: c, label: "Avg. Engagement Rate LI", cls: k.li_engagement_rate === null ? "kpi-value gray" : "kpi-value",
+      style: k.li_engagement_rate !== null ? "color:" + c : "", value: pctFmt(k.li_engagement_rate), note: "LinkedIn",
+      delta: deltaHTML(k.li_engagement_rate, p && p.li_engagement_rate, "pct", prevQ) }) +
+    "</div>";
+}
+
+// ① The generator's event timeline needs unique_events (attendee-level, never
+// published). From aggregated KPIs we can still show the largest event and
+// everything else combined.
+function highlightsVis(k, c) {
+  let body;
+  if (!k.events) {
+    body = '<div class="vis-empty">No events in this period</div>';
+  } else {
+    const rows = [];
+    if (k.largest_event !== null) {
+      rows.push({ when: "Top", name: k.largest_event_name || "Largest event", tag: "Largest event", att: k.largest_event });
+    }
+    if (k.events > 1 && k.attendance !== null && k.largest_event !== null) {
+      const others = k.events - 1;
+      rows.push({ when: "+" + others, name: others + " other event" + (others > 1 ? "s" : ""), tag: "Combined", att: k.attendance - k.largest_event });
+    }
+    body = '<div class="tl">' + rows.map(e =>
+      '<div class="tl-row"><div class="tl-date">' + esc(e.when) + '</div>' +
+      '<div class="tl-dot" style="background:' + c + '"></div>' +
+      '<div class="tl-info"><div class="tl-name">' + esc(e.name) + '</div><span class="tl-tag">' + e.tag + "</span></div>" +
+      '<div><div class="tl-att" style="color:' + c + '">' + intFmt(e.att) + '</div><div class="tl-att-lbl">att.</div></div></div>'
+    ).join("") + "</div>" +
+    '<div class="tl-footer"><span class="tl-footer-lbl">Total attendees · ' + intFmt(k.events) + " event(s)</span>" +
+    '<span class="tl-footer-val">' + intFmt(k.attendance) + "</span></div>";
+  }
+  return '<div class="vis"><div class="vis-title">① Events This Period <span class="vis-title-tag">Highlights</span></div>' + body + "</div>";
+}
+
+// ② Quarter over quarter for this chapter: up to the last four quarters
+// ending at the selected one.
+const TREND_METRICS = [
+  ["attendance", "Attendees"], ["events", "Events held"],
+  ["new_li_followers", "New LinkedIn followers"], ["li_posts", "LinkedIn posts"]
+];
+function trendVis(ch, c) {
+  const qs = DATA.quarters.filter(q => quarterRank(q) <= quarterRank(state.quarter)).slice(-4);
+  const head = '<div class="vis"><div class="vis-title">② Quarter over Quarter <span class="vis-title-tag">Clustered bar</span></div>';
+  if (qs.length < 2) {
+    return head + '<div class="vis-empty">Only one quarter on record so far —<br>the trend appears once the next quarter is exported.</div></div>';
+  }
+  const shade = q => (q === state.quarter ? c : c + "66");
+  const groups = TREND_METRICS.map(([key, label]) => {
+    const vals = qs.map(q => { const r = rowOf(ch.slug, q); return r ? r[key] : null; });
+    const max = Math.max(1, ...vals.filter(v => v !== null));
+    return '<div><div class="qt-group-lbl">' + label + "</div>" + qs.map((q, i) =>
+      '<div class="qt-row"><span class="qt-q">Q' + q.slice(-1) + '</span><div class="qt-track">' +
+      (vals[i] === null ? "" : '<div class="qt-fill" style="width:' + (vals[i] / max * 100).toFixed(1) + "%;background:" + shade(q) + '"></div>') +
+      '</div><span class="qt-val">' + intFmt(vals[i]) + "</span></div>").join("") + "</div>";
+  }).join("");
+  const legend = '<div class="legend-row">' + qs.map(q =>
+    '<span><i style="background:' + shade(q) + '"></i>' + quarterLabel(q) + "</span>").join("") + "</div>";
+  return head + '<div class="qt">' + groups + "</div>" + legend + "</div>";
+}
+
+// ③ LinkedIn metrics, each bar scaled against the network maximum this quarter.
+function linkedinVis(k, c, rows) {
+  const head = '<div class="vis"><div class="vis-title">③ LinkedIn — Period Metrics <span class="vis-title-tag">Bar chart</span></div>';
+  if (!k.li_posts) {
+    return head + '<div class="vis-empty"><div style="font-size:28px;color:#E1DFDD;margin-bottom:6px">—</div>No LinkedIn posts tracked<br>this period' +
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--light)">New followers (organic)</div>' +
+      '<div style="font-size:26px;font-weight:700;color:var(--green);margin-top:2px">+' + intFmt(k.new_li_followers || 0) + "</div></div></div></div>";
+  }
+  const max = key => Math.max(...rows.map(r => r[key] || 0), key === "li_engagement_rate" ? 0.1 : 1);
+  const pct = (v, key) => Math.max((v || 0) / max(key) * 100, 4).toFixed(1);
+  const row = (label, key, shown, fill) =>
+    '<div class="hb-row"><span class="hb-lbl">' + label + '</span><div class="hb-track"><div class="hb-fill" style="width:' + pct(k[key], key) + "%;background:" + fill + '">' +
+    '<span class="hb-text">' + shown + '</span></div></div><span class="hb-val">' + shown + "</span></div>";
+  return head + '<div class="hbar">' +
+    row("Posts Published", "li_posts", intFmt(k.li_posts), c) +
+    row("Impressions", "li_impressions", intFmt(k.li_impressions || 0), c + "bb") +
+    row("Engagement Rate", "li_engagement_rate", pctFmt(k.li_engagement_rate), c + "88") +
+    row("New Followers", "new_li_followers", "+" + intFmt(k.new_li_followers || 0), "#107C10aa") +
+    "</div></div>";
+}
+
+// ④ Half-donut gauge, drawn as two SVG annulus paths (no chart library).
+function gaugeSVG(value, max, color) {
+  const cx = 90, cy = 92, R = 72, r = 58;
+  const p = Math.max(0, Math.min(value / max, 1));
+  const pt = (rad, f) => { const a = Math.PI * (1 - f); return (cx + rad * Math.cos(a)).toFixed(2) + " " + (cy - rad * Math.sin(a)).toFixed(2); };
+  const band = f => "M " + pt(R, 0) + " A " + R + " " + R + " 0 0 1 " + pt(R, f) + " L " + pt(r, f) + " A " + r + " " + r + " 0 0 0 " + pt(r, 0) + " Z";
+  const tick = (f, label) => {
+    const a = Math.PI * (1 - f), x = cx + (R + 10) * Math.cos(a), y = cy - (R + 10) * Math.sin(a);
+    return '<text x="' + x.toFixed(1) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="middle" font-size="8" fill="#A19F9D">' + label + "</text>";
+  };
+  return '<svg viewBox="0 0 180 100" role="img" aria-label="Engagement rate gauge">' +
+    '<path d="' + band(1) + '" fill="rgba(255,255,255,0.08)"/>' +
+    (p > 0 ? '<path d="' + band(p) + '" fill="' + color + '"/>' : "") +
+    tick(0, "0") + tick(0.5, (max / 2) + "%") + tick(1, max + "%") + "</svg>";
+}
+
+function gaugeVis(k, c, rows) {
+  const head = '<div class="vis"><div class="vis-title">④ Engagement Rate LI <span class="vis-title-tag">Gauge</span></div>';
+  if (k.li_engagement_rate === null) {
+    return head + '<div class="vis-empty"><div style="font-size:40px;color:#E1DFDD;line-height:1">—</div>No engagement tracked<br>this period</div></div>';
+  }
+  const top = Math.max(...rows.map(r => r.li_engagement_rate || 0)) * 100;
+  const max = Math.max(25, Math.ceil(top * 1.2 / 5) * 5);
+  const net = aggregate(rows, "li_engagement_rate");
+  return head + '<div class="gauge-body">' + gaugeSVG(k.li_engagement_rate * 100, max, c) +
+    '<div class="gauge-num">' + pctFmt(k.li_engagement_rate) + '</div><div class="gauge-lbl">Avg. Engagement Rate LI</div>' +
+    (net !== null ? '<div class="gauge-sub">Network: ' + pctFmt(net) + " (weighted by followers)</div>" : "") +
+    "</div></div>";
+}
+
+function chapterView(ch) {
+  const q = state.quarter, rows = rowsFor(q), k = rowOf(ch.slug, q);
+  const prevQ = prevQuarterOf(q), p = prevQ ? rowOf(ch.slug, prevQ) : null;
+  const c = ch.color;
+  const sub = intFmt(k.events || 0) + " event(s) · " + intFmt(k.attendance || 0) + " attendees · " +
+    (k.li_engagement_rate !== null ? "engagement " + pctFmt(k.li_engagement_rate) : "no engagement tracked") +
+    " · " + chapterBadge(k, rows);
+  return titleRow(ch.label, "Chapter", sub) +
+    chapterKpis(k, p, prevQ, c) +
+    '<div class="chart-grid">' + highlightsVis(k, c) + trendVis(ch, c) + linkedinVis(k, c, rows) + gaugeVis(k, c, rows) + "</div>" +
+    insightsVis(chapterInsights(k, rows, p, prevQ));
+}
+
+/* ===================== comparison page ===================== */
+function clusteredBarSVG(chs, q) {
+  const W = 460, H = 190, m = { t: 16, r: 10, b: 28, l: 26 };
+  const att = chs.map(c => rowOf(c.slug, q).attendance || 0);
+  const fol = chs.map(c => rowOf(c.slug, q).new_li_followers || 0);
+  const maxY = Math.max(...att, ...fol, 10) * 1.1;
+  const y = v => H - m.b - (v / maxY) * (H - m.b - m.t);
+  const band = (W - m.l - m.r) / chs.length, inner = band * 0.72, bw = inner / 2 - 2;
+  const step = Math.max(10, Math.ceil(maxY / 4 / 10) * 10);
+  let out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Attendees and new LinkedIn followers by chapter">';
+  for (let v = 0; v <= maxY; v += step) {
+    out += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" stroke="rgba(255,255,255,0.07)"/>' +
+      '<text x="' + (m.l - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#605E5C">' + v + "</text>";
+  }
+  chs.forEach((c, i) => {
+    const x0 = m.l + i * band + (band - inner) / 2;
+    [[att[i], c.color, 0], [fol[i], "#A19F9D", 1]].forEach(([v, col, j]) => {
+      const x = x0 + j * (bw + 4);
+      out += '<rect x="' + x.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (H - m.b - y(v)).toFixed(1) + '" fill="' + col + '" rx="2"/>' +
+        '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y(v) - 3).toFixed(1) + '" text-anchor="middle" font-size="8" fill="#A19F9D">' + v + "</text>";
     });
-    row.addEventListener("blur", hideTip);
-    wrap.append(row);
-  }
-}
-
-function renderTable() {
-  const headRow = $("headRow"), body = $("bodyRows"), foot = $("footRow");
-  headRow.textContent = ""; body.textContent = ""; foot.textContent = "";
-
-  const cols = [{ key: "chapter", label: "Chapter", short: "Chapter" }].concat(METRICS);
-
-  for (const c of cols) {
-    const th = document.createElement("th");
-    th.scope = "col"; th.tabIndex = 0;
-    th.title = c.label;
-    const txt = document.createElement("span");
-    txt.textContent = c.short || c.label;
-    th.append(txt);
-    if (state.sort === c.key) {
-      th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
-      const mark = document.createElement("span");
-      mark.className = "sortmark"; mark.setAttribute("aria-hidden", "true");
-      mark.textContent = state.dir === "asc" ? "▲" : "▼";
-      th.append(mark);
-    }
-    const act = () => {
-      if (state.sort === c.key) state.dir = state.dir === "asc" ? "desc" : "asc";
-      else { state.sort = c.key; state.dir = c.key === "chapter" ? "asc" : "desc"; }
-      writeURL(); renderTable();
-    };
-    th.addEventListener("click", act);
-    th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } });
-    headRow.append(th);
-  }
-
-  const rows = rowsFor(state.quarter).slice();
-  const key = state.dir === "asc" ? 1 : -1;
-  rows.sort((a, b) => {
-    if (state.sort === "chapter") return a.chapter.localeCompare(b.chapter) * key;
-    const av = a[state.sort], bv = b[state.sort];
-    if (av === null && bv === null) return a.chapter.localeCompare(b.chapter);
-    if (av === null) return 1;      // nulls always sort last, both directions
-    if (bv === null) return -1;
-    return av === bv ? a.chapter.localeCompare(b.chapter) : (av - bv) * key;
+    out += '<text x="' + (m.l + i * band + band / 2).toFixed(1) + '" y="' + (H - m.b + 12) + '" text-anchor="middle" font-size="9" font-weight="600" fill="' +
+      (c.slug === "toronto" || c.slug === "ottawa" ? "#C8C6C4" : c.color) + '">' + esc(c.label.slice(0, 3)) + "</text>";
   });
-
-  if (!rows.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = cols.length; td.style.textAlign = "left"; td.className = "na";
-    td.textContent = "No chapters selected.";
-    tr.append(td); body.append(tr);
-    return;
-  }
-
-  const styleRowHead = th => {
-    th.style.fontWeight = "500"; th.style.textTransform = "none";
-    th.style.letterSpacing = "0"; th.style.fontSize = "13px";
-    th.style.color = "var(--ink)"; th.style.cursor = "default";
-  };
-
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    const th = document.createElement("th");
-    th.scope = "row"; styleRowHead(th); th.textContent = r.chapter;
-    tr.append(th);
-    for (const m of METRICS) {
-      const td = document.createElement("td");
-      setValue(td, r[m.key], m.fmt);
-      tr.append(td);
-    }
-    body.append(tr);
-  }
-
-  const fth = document.createElement("th");
-  fth.scope = "row"; styleRowHead(fth);
-  fth.style.fontWeight = "600";
-  fth.textContent = "All selected (" + rows.length + ")";
-  foot.append(fth);
-  for (const m of METRICS) {
-    const td = document.createElement("td");
-    setValue(td, aggregate(rows, m), m.fmt);
-    foot.append(td);
-  }
+  return out + "</svg>";
 }
 
-function renderChapterSummary() {
-  const sel = selectedSlugs();
-  const total = DATA.chapters.length;
-  const el = $("chapSummary");
-  if (sel.length === total) el.textContent = "All chapters (" + total + ")";
-  else if (sel.length === 0) el.textContent = "No chapters";
-  else if (sel.length <= 2) el.textContent = DATA.chapters.filter(c => sel.includes(c.slug)).map(c => c.name).join(", ");
-  else el.textContent = sel.length + " of " + total + " chapters";
+function engagementBars(chs, q) {
+  const vals = chs.map(c => rowOf(c.slug, q).li_engagement_rate);
+  const max = Math.max(...vals.map(v => v || 0), 0.1) * 1.1;
+  return chs.map((c, i) => '<div class="eng-row"><span class="eng-lbl">' + esc(c.label) + '</span><div class="eng-track">' +
+    (vals[i] === null
+      ? '<div class="eng-fill" style="justify-content:center;color:#C8C6C4;width:100%">N/A</div>'
+      : '<div class="eng-fill" style="width:' + (vals[i] / max * 100).toFixed(1) + "%;background:" + c.color + '">' + pctFmt(vals[i]) + "</div>") +
+    "</div></div>").join("");
+}
+
+function compareView() {
+  const q = state.quarter, rows = rowsFor(q), chs = chaptersIn(q);
+  const prevQ = prevQuarterOf(q), prevRows = prevQ ? rowsFor(prevQ) : null;
+  const net = key => aggregate(rows, key);
+  const before = key => (prevRows ? aggregate(prevRows, key) : null);
+  const blue = "#118DFF";
+  const cell = (v, plus) => v === null
+    ? '<span class="cmp-val na">N/A</span>'
+    : '<span class="cmp-val' + (plus && v > 0 ? " green" : "") + '">' + (plus ? "+" : "") + v + "</span>";
+
+  const minis = chs.map(c => {
+    const k = rowOf(c.slug, q);
+    const line = (label, v) => '<div class="cmp-row"><span class="cmp-lbl">' + label + "</span>" + v + "</div>";
+    return '<div class="cmp-mini" style="--cc:' + c.color + '"><div class="cmp-mini-name">' + esc(c.label) + "</div>" +
+      line("Events", cell(k.events === null ? null : intFmt(k.events))) +
+      line("Attendees", cell(k.attendance === null ? null : intFmt(k.attendance))) +
+      line("Avg/event", cell(k.avg_attendance === null ? null : dec1(k.avg_attendance))) +
+      line("+LI Followers", cell(k.new_li_followers === null ? null : intFmt(k.new_li_followers), true)) +
+      line("Total LI", cell(k.total_li_followers === null ? null : intFmt(k.total_li_followers))) +
+      line("LI Posts", cell(k.li_posts === null ? null : intFmt(k.li_posts))) +
+      line("Impressions", cell(k.li_impressions === null ? null : intFmt(k.li_impressions))) +
+      line("Engagement", cell(k.li_engagement_rate === null ? null : pctFmt(k.li_engagement_rate))) +
+      "</div>";
+  }).join("");
+
+  return titleRow("Chapter", "Comparison", "All chapters · same KPIs · " + periodLabel(q)) +
+    '<div class="net-kpi">' +
+      kpiCard({ color: blue, label: "Total Events (network)", cls: "kpi-value accent", value: intFmt(net("events")), note: "all chapters", delta: deltaHTML(net("events"), before("events"), "int", prevQ) }) +
+      kpiCard({ color: blue, label: "Total Attendees", cls: "kpi-value", value: intFmt(net("attendance")), note: "network sum", delta: deltaHTML(net("attendance"), before("attendance"), "int", prevQ) }) +
+      kpiCard({ color: blue, label: "+LI Followers (network)", cls: "kpi-value green", value: "+" + intFmt(net("new_li_followers")), note: "sum across chapters", delta: deltaHTML(net("new_li_followers"), before("new_li_followers"), "int", prevQ) }) +
+      kpiCard({ color: blue, label: "Posts Published (network)", cls: "kpi-value", value: intFmt(net("li_posts")), note: "sum across chapters", delta: deltaHTML(net("li_posts"), before("li_posts"), "int", prevQ) }) +
+      kpiCard({ color: blue, label: "Largest Event", cls: "kpi-value accent", value: intFmt(net("largest_event")), note: "attendees, single event", delta: deltaHTML(net("largest_event"), before("largest_event"), "int", prevQ) }) +
+    "</div>" +
+    '<div class="cmp-mini-row">' + minis + "</div>" +
+    '<div class="cmp-charts">' +
+      '<div class="vis"><div class="vis-title">Attendees vs. New LI Followers <span class="vis-title-tag">Clustered bar</span></div>' +
+        clusteredBarSVG(chs, q) +
+        '<div class="legend-row"><span><i style="background:#605E5C"></i>Attendees (chapter colour)</span><span><i style="background:#A19F9D"></i>+LI Followers</span></div></div>' +
+      '<div class="vis"><div class="vis-title">Engagement Rate LI <span class="vis-title-tag">Horizontal bar</span></div>' + engagementBars(chs, q) + "</div>" +
+    "</div>" +
+    insightsVis(networkInsights(rows, prevRows, prevQ));
+}
+
+/* ===================== page shell ===================== */
+function renderTabs() {
+  const tabs = $("tabs");
+  tabs.textContent = "";
+  const add = (view, html) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pbi-page-tab" + (state.view === view ? " active" : "");
+    b.dataset.view = view;
+    if (state.view === view) b.setAttribute("aria-current", "page");
+    b.innerHTML = html;
+    b.addEventListener("click", () => { state.view = view; writeURL(); render(); });
+    tabs.append(b);
+  };
+  for (const c of chaptersIn(state.quarter)) {
+    add(c.slug, '<span class="tab-dot" style="background:' + c.color + '"></span> ' + esc(c.label));
+  }
+  add(CMP, "⊞ Comparison");
+  const bar = document.createElement("div");
+  bar.className = "pbi-filter-bar";
+  bar.innerHTML = '<span>Period:</span><span class="filter-chip">' + periodLabel(state.quarter) + "</span>";
+  tabs.append(bar);
 }
 
 function render() {
-  renderChapterSummary();
-  renderCards();
-  renderBars();
-  renderTable();
-  $("main").classList.remove("is-loading");
-}
-
-/* ===================== filter wiring ===================== */
-function syncChapterBoxes() {
-  const sel = new Set(selectedSlugs());
-  for (const cb of $("chapPanel").querySelectorAll('input[type="checkbox"]')) cb.checked = sel.has(cb.value);
+  const present = chaptersIn(state.quarter);
+  if (state.view !== CMP && !present.some(c => c.slug === state.view)) {
+    state.view = present.length ? present[0].slug : CMP;
+  }
+  renderTabs();
+  $("canvas").innerHTML = state.view === CMP ? compareView() : chapterView(chapterBySlug(state.view));
 }
 
 function buildControls() {
@@ -993,66 +1042,14 @@ function buildControls() {
   qs.textContent = "";
   for (const q of DATA.quarters) {
     const o = document.createElement("option");
-    o.value = q; o.textContent = quarterLabel(q);
+    o.value = q; o.textContent = periodLabel(q);
     qs.append(o);
   }
   qs.value = state.quarter;
   qs.addEventListener("change", () => { state.quarter = qs.value; writeURL(); render(); });
-
-  const rs = $("rankSel");
-  rs.textContent = "";
-  for (const m of METRICS) {
-    const o = document.createElement("option");
-    o.value = m.key; o.textContent = m.label;
-    rs.append(o);
-  }
-  rs.value = state.rank;
-  rs.addEventListener("change", () => { state.rank = rs.value; writeURL(); render(); });
-
-  const panel = $("chapPanel");
-  panel.textContent = "";
-  const sel = new Set(selectedSlugs());
-  for (const c of DATA.chapters) {
-    const lab = document.createElement("label");
-    lab.className = "opt";
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = c.slug; cb.checked = sel.has(c.slug);
-    const span = document.createElement("span");
-    span.textContent = c.name;
-    lab.append(cb, span);
-    cb.addEventListener("change", () => {
-      const picked = Array.from(panel.querySelectorAll('input[type="checkbox"]')).filter(x => x.checked).map(x => x.value);
-      state.chapters = picked.length === DATA.chapters.length ? null : picked;
-      writeURL(); render();
-    });
-    panel.append(lab);
-  }
-  const foot = document.createElement("div");
-  foot.className = "combo-foot";
-  const all = document.createElement("button");
-  all.type = "button"; all.className = "linkish"; all.textContent = "Select all";
-  const none = document.createElement("button");
-  none.type = "button"; none.className = "linkish"; none.textContent = "Clear";
-  all.addEventListener("click", () => { state.chapters = null; syncChapterBoxes(); writeURL(); render(); });
-  none.addEventListener("click", () => { state.chapters = []; syncChapterBoxes(); writeURL(); render(); });
-  foot.append(all, none);
-  panel.append(foot);
-
-  const combo = $("chapCombo");
-  combo.addEventListener("toggle", () => combo.querySelector("summary").setAttribute("aria-expanded", String(combo.open)));
-  document.addEventListener("click", e => { if (combo.open && !combo.contains(e.target)) combo.open = false; });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && combo.open) combo.open = false; });
-
-  $("resetBtn").addEventListener("click", () => {
-    state.quarter = DATA.quarters[DATA.quarters.length - 1];
-    state.chapters = null;
-    state.rank = DEFAULTS.rank; state.sort = DEFAULTS.sort; state.dir = DEFAULTS.dir;
-    qs.value = state.quarter; rs.value = state.rank;
-    syncChapterBoxes(); writeURL(); render();
-  });
 }
 
-/* ===================== chrome: copy link, theme ===================== */
+/* ===================== copy link ===================== */
 let toastTimer = null;
 function toast(msg) {
   const t = $("toast");
@@ -1078,47 +1075,10 @@ $("copyLink").addEventListener("click", async () => {
   }
 });
 
-$("themeBtn").addEventListener("click", () => {
-  const root = document.documentElement;
-  const dark = root.getAttribute("data-theme") === "dark" ||
-    (!root.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  root.setAttribute("data-theme", dark ? "light" : "dark");
-  try { localStorage.setItem("slit-theme", dark ? "light" : "dark"); } catch (e) {}
-});
-try {
-  const saved = localStorage.getItem("slit-theme");
-  if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
-} catch (e) {}
-
-/* ===================== "Q3 is coming" countdown ===================== */
-// Fixed target, not "N days from whenever this loads" - every visitor sees
-// the same clock. Recurring setTimeout rather than setInterval so a slow
-// tick can't stack up overlapping timers.
-const Q3_COUNTDOWN_TARGET = new Date("2026-10-05T00:00:00");
-function tickCountdown() {
-  const el = $("countdownClock");
-  if (el) {
-    const diff = Q3_COUNTDOWN_TARGET.getTime() - Date.now();
-    if (diff <= 0) {
-      el.textContent = "It's here!";
-    } else {
-      const d = Math.floor(diff / 86400000);
-      const h = Math.floor((diff % 86400000) / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      const pad = n => String(n).padStart(2, "0");
-      el.textContent = d + "d " + pad(h) + "h " + pad(m) + "m " + pad(s) + "s";
-    }
-  }
-  setTimeout(tickCountdown, 1000);
-}
-tickCountdown();
-
 /* ===================== boot ===================== */
 function renderSourceChip(loaded) {
-  const dot = $("srcDot"), text = $("srcText"), meta = $("srcMeta");
-  dot.className = "dot " + loaded.kind;
-  text.textContent = loaded.source;
+  $("srcDot").className = "dot " + loaded.kind;
+  $("srcText").textContent = loaded.source;
   const bits = [];
   if (loaded.generated_at) {
     const d = new Date(loaded.generated_at);
@@ -1128,9 +1088,8 @@ function renderSourceChip(loaded) {
   }
   bits.push(DATA.rows.length + " rows · " + DATA.quarters.length +
     " quarter" + (DATA.quarters.length === 1 ? "" : "s") + " · " + DATA.chapters.length + " chapters");
-  if (loaded.sample) bits.push("static snapshot — connect CONFIG.DATA_URL for live data");
   if (loaded.problems && loaded.problems.length) bits.push("fell back after: " + loaded.problems.join("; "));
-  meta.textContent = bits.join(" · ");
+  $("srcMeta").textContent = bits.join(" · ");
 }
 
 (async function boot() {
@@ -1138,27 +1097,25 @@ function renderSourceChip(loaded) {
   const loaded = await loadData();
 
   DATA.rows = loaded.rows;
-  DATA.source = loaded.source;
-  DATA.sample = loaded.sample;
-  DATA.generated_at = loaded.generated_at;
   DATA.quarters = Array.from(new Set(loaded.rows.map(r => r.quarter))).sort((a, b) => quarterRank(a) - quarterRank(b));
-  DATA.chapters = Array.from(new Map(loaded.rows.map(r => [r.chapterSlug, { slug: r.chapterSlug, name: r.chapter }])).values())
-    .sort((a, b) => a.name.localeCompare(b.name));
+  let extra = 0;
+  DATA.chapters = Array.from(new Map(loaded.rows.map(r => [r.chapterSlug, r.chapter])).entries())
+    .map(([s, name]) => ({
+      slug: s, name,
+      label: CHAPTER_DISPLAY_NAME[s] || name,
+      color: CHAPTER_COLORS[s] || FALLBACK_COLORS[extra++ % FALLBACK_COLORS.length]
+    }))
+    .sort(chapterSort);
 
   if (!state.quarter || !DATA.quarters.includes(state.quarter)) {
     state.quarter = DATA.quarters[DATA.quarters.length - 1];
-  }
-  if (state.chapters) {
-    const valid = new Set(DATA.chapters.map(c => c.slug));
-    state.chapters = state.chapters.filter(s => valid.has(s));
-    if (state.chapters.length === DATA.chapters.length) state.chapters = null;
   }
 
   checkDataRules(DATA.rows);
   renderSourceChip(loaded);
   buildControls();
-  writeURL();
   render();
+  writeURL();
 })();
 </script>
 </body>

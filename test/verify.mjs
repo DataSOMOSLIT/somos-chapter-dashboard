@@ -85,7 +85,7 @@ function makeEl(tag = "div", id = "") {
 
 
 const IDS = ["ownerEmail","copyLink","banner","srcDot","srcText","srcMeta","quarterSel",
-  "tabs","canvas","toast"];
+  "vsSel","tabs","canvas","toast"];
 
 /**
  * Boot the dashboard script in a fresh context.
@@ -143,6 +143,7 @@ const canvas = T => T.byId.get("canvas").innerHTML;
 const tabs = T => T.kids("tabs").filter(t => t.tagName === "BUTTON");
 const clickTab = (T, view) => tabs(T).find(t => t.dataset.view === view).fire("click");
 const pickQuarter = (T, q) => { const s = T.byId.get("quarterSel"); s.value = q; s.fire("change"); };
+const pickCompare = (T, q) => { const s = T.byId.get("vsSel"); s.value = q; s.fire("change"); };
 const has = (name, T, needle) => ok(name, canvas(T).includes(needle), "canvas lacks " + JSON.stringify(needle));
 const lacks = (name, T, needle) => ok(name, !canvas(T).includes(needle), "canvas has " + JSON.stringify(needle));
 
@@ -158,6 +159,9 @@ console.log("\n2. Period selector and page tabs (generator order and names)");
 eq("period options", A.kids("quarterSel").map(o => o.textContent).join("|"),
   "Q2 2026 · Apr – Jun|Q3 2026 · Jul – Sep");
 eq("defaults to the latest quarter", A.byId.get("quarterSel").value, "2026_Q3");
+eq("compare-with options exclude the quarter on screen", A.kids("vsSel").map(o => o.textContent).join("|"),
+  "No comparison|Q2 2026 · Apr – Jun");
+eq("no comparison by default", A.byId.get("vsSel").value, "");
 eq("tab order: KNOWN_ORDER, Canada last, then Comparison",
   tabs(A).map(t => t.dataset.view).join(","), "montreal,toronto,vancouver,ottawa,calgary,canada,cmp");
 ok("Montreal shown as Montréal", tabs(A)[0].innerHTML.includes("Montréal"));
@@ -166,7 +170,7 @@ ok("first chapter tab is active", tabs(A)[0].className.includes("active"));
 ok("period chip in the tab strip", A.kids("tabs").at(-1).innerHTML.includes("Q3 2026 · Jul – Sep"));
 eq("URL records quarter + page", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q3&view=montreal");
 
-console.log("\n3. Chapter page — Toronto, Q3 2026 vs Q2 2026");
+console.log("\n3. Chapter page — Toronto, Q3 2026 on its own (no comparison picked)");
 clickTab(A, "toronto");
 ok("Toronto tab now active", tabs(A)[1].className.includes("active") && !tabs(A)[0].className.includes("active"));
 eq("URL follows the tab", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q3&view=toronto");
@@ -174,16 +178,29 @@ has("page title", A, "Toronto <span>Chapter</span>");
 has("subtitle + badge (Canada leads attendance, Toronto leads engagement)", A,
   "1 event(s) · 53 attendees · engagement 25.2% · Engagement Leader");
 has("new followers card", A, "+93");
-has("events delta 3 → 1", A, "▼ −66.7% vs Q2 2026");
-has("attendance delta 175 → 53", A, "▼ −69.7% vs Q2 2026");
-has("engagement delta in points (17.93% → 25.2%)", A, "▲ +7.3 pts vs Q2 2026");
+lacks("no deltas without a comparison", A, "vs Q2 2026");
+lacks("no comparison panel", A, "Quarter Comparison");
+has("share-of-network panel instead", A, "Share of Network");
+has("Toronto's share of Q3 attendance (53 / 202)", A, ">26.2%</span>");
+has("period chip shows just Q3", A, '<div class="period-chip">Q3 2026 · Jul – Sep</div>');
 has("largest event highlighted", A, "Somos Latinx in Tech Summer Soirée");
 lacks("single event → no 'other events' row", A, "other event");
-has("trend legend lists both quarters", A, "Q2 2026</span>");
 has("gauge drawn", A, "Engagement rate gauge");
 has("gauge scale tops out at 35% (25.2% × 1.2, rounded up to 5)", A, ">35%</text>");
 has("network engagement shown under the gauge", A, "Network: 19.1%");
 has("avg vs network insight (Σ202 / Σ8 = 25.3)", A, "is above the network average (25.3)");
+lacks("no quarter-over-quarter insight", A, "Attendance down");
+
+console.log("\n3b. Compare with Q2 2026 → deltas and the quarter comparison appear");
+pickCompare(A, "2026_Q2");
+eq("URL records the comparison", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q3&vs=2026_Q2&view=toronto");
+has("period chip names both quarters", A, "Q3 2026 · Jul – Sep vs Q2 2026");
+has("events delta 3 → 1", A, "▼ −66.7% vs Q2 2026");
+has("attendance delta 175 → 53", A, "▼ −69.7% vs Q2 2026");
+has("engagement delta in points (17.93% → 25.2%)", A, "▲ +7.3 pts vs Q2 2026");
+has("quarter comparison panel", A, "Quarter Comparison");
+lacks("share panel replaced", A, "Share of Network");
+has("legend lists both quarters", A, "Q2 2026</span>");
 has("attendance quarter-over-quarter insight", A, "Attendance down 69.7%</strong> vs Q2 2026 (175 → 53)");
 
 console.log("\n4. Chapter page — Red Nacional (Canada), two events");
@@ -214,14 +231,21 @@ has("network insight: quarter over quarter", A, "Network attendance down 42.5%</
 
 console.log("\n6. Switching to Q2 2026 — the first quarter on record");
 pickQuarter(A, "2026_Q2");
-eq("stays on the Comparison page", A.sandbox.location.href, "http://127.0.0.1:8765/?q=2026_Q2&view=cmp");
+eq("stays on the Comparison page; comparing Q2 with itself is dropped", A.sandbox.location.href,
+  "http://127.0.0.1:8765/?q=2026_Q2&view=cmp");
+eq("compare-with now offers Q3", A.kids("vsSel").map(o => o.textContent).join("|"), "No comparison|Q3 2026 · Jul – Sep");
 has("Q2 network attendance 351", A, ">351</div>");
-lacks("no prior quarter → no deltas", A, "vs Q1 2026");
-lacks("no prior quarter → no QoQ insight", A, "Network attendance");
+lacks("no comparison → no deltas", A, "vs Q");
+lacks("no comparison → no QoQ insight", A, "Network attendance");
 has("Toronto led Q2 attendance (175)", A, "Toronto leads in attendees</strong> (175");
 clickTab(A, "calgary");
 has("Calgary flagged for Q2's lowest engagement (2.8%)", A, "Improvement Opportunity");
-has("trend waits for a second quarter", A, "Only one quarter on record so far");
+has("share panel on a single quarter", A, "Share of Network");
+pickCompare(A, "2026_Q3");
+has("Q2 compared with a later quarter: Calgary 41 vs 15 reads as Q2 being higher", A, "▲ +173.3% vs Q3 2026");
+has("bars still in chronological order (Q2 first)", A, '<span class="qt-q">Q2</span>');
+pickCompare(A, "");
+lacks("choosing 'No comparison' removes the deltas", A, "vs Q3 2026");
 
 console.log("\n7. Deep links are honoured; junk is ignored");
 {
@@ -233,6 +257,10 @@ console.log("\n7. Deep links are honoured; junk is ignored");
   has("view is case-insensitive", C, "Chapter <span>Comparison</span>");
   const D = await boot({ search: "?q=1999_Q9&view=atlantis&rank=bogus&ch=x", fetchImpl: servesJSON(kpis) });
   eq("bad quarter → latest", D.byId.get("quarterSel").value, "2026_Q3");
+  const V = await boot({ search: "?q=2026_Q3&vs=2026_Q3&view=cmp", fetchImpl: servesJSON(kpis) });
+  eq("comparing a quarter with itself is ignored", V.byId.get("vsSel").value, "");
+  const W = await boot({ search: "?q=2026_Q3&vs=Q2_2026&view=cmp", fetchImpl: servesJSON(kpis) });
+  has("comparison deep link honoured", W, "▼ −42.5% vs Q2 2026");
   eq("unknown page → first chapter, old params dropped", D.sandbox.location.href,
     "http://127.0.0.1:8765/?q=2026_Q3&view=montreal");
 }

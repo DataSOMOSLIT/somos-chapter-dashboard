@@ -11,31 +11,38 @@ Interactive dashboard for chapter KPIs, hosted on GitHub Pages.
 ## Layout
 
 Same look as the Data Analytics Team's `SOMOS_Dashboard_Generator.html`
-(Power BI style, dark): a period selector in the top bar, one page per
+(Power BI style, dark): a period selector and a **"Compare with"** selector
+in the top bar, one page per
 chapter (Montréal, Toronto, Vancouver, Ottawa, Calgary, Red Nacional =
 `Canada`), and a **Comparison** page.
 
-- **Chapter page:** five KPI cards with change vs the previous quarter,
-  ① events this period (largest event + the rest combined), ② quarter over
-  quarter, ③ LinkedIn period metrics, ④ engagement-rate gauge, and
+A quarter is shown **on its own** by default — no deltas, no comparison. Pick
+a quarter in "Compare with" (any other quarter in the data, earlier or later)
+to add the change on every KPI card, the quarter-comparison panel and the
+quarter-over-quarter insights; "No comparison" goes back to the single quarter.
+
+- **Chapter page:** five KPI cards, ① events this period (largest event + the
+  rest combined), ② share of network (single quarter) or quarter comparison
+  (when comparing), ③ LinkedIn period metrics, ④ engagement-rate gauge, and
   rule-based insights.
-- **Comparison page:** network totals with change vs the previous quarter, one
-  mini card per chapter, attendees vs new LinkedIn followers, engagement rate
+- **Comparison page** (compares chapters): network totals, one mini card per
+  chapter, attendees vs new LinkedIn followers, engagement rate
   by chapter, and network insights.
 
 The generator's event timeline and in-person/online donut need `unique_events`
 (attendee-level data, never published), so this page shows the largest-event
-highlight and the quarter-over-quarter trend in their place.
+highlight and the share-of-network / quarter-comparison panel in their place.
 
 Every view has its own URL, so **"Copy link"** can be shared in Slack:
 
 | Parameter | Meaning | Example |
 |---|---|---|
 | `q` | Quarter (defaults to the latest) | `?q=2026_Q2` |
+| `vs` | Quarter to compare against (omit for no comparison) | `?vs=2026_Q2` |
 | `view` | Chapter slug or `cmp` (defaults to the first chapter) | `?view=toronto` |
 
 ```
-https://datasomoslit.github.io/somos-chapter-dashboard/?q=2026_Q3&view=cmp
+https://datasomoslit.github.io/somos-chapter-dashboard/?q=2026_Q3&vs=2026_Q2&view=cmp
 ```
 
 ## Data sources (in this order)
@@ -204,7 +211,7 @@ No dependencies and no browser. The suite pulls the `<script>` block out of
 easy to break silently: the source-fallback chain, null handling (N/A, never
 zero — a chapter with events but no LinkedIn export yet, or vice versa), the
 `li_engagement_rate > 1` banner, followers-weighted rate aggregation, the
-`largest_event` max aggregation, quarter-over-quarter deltas, chapter page
+`largest_event` max aggregation, single-quarter vs compare mode and its deltas, chapter page
 order and names, HTML escaping of event names, URL round-tripping, and tolerance for `Q2_2026` / `2026-Q2` / `"4.6%"` / a
 capitalised `Period` header coming out of Sheets, and the CSV parser (quoted
 commas in event names, doubled-quote escaping, CRLF/LF line endings). Run it

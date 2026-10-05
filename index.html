@@ -49,6 +49,7 @@
   .pbi-sep { width: 1px; height: 20px; background: rgba(255,255,255,.15); }
   .pbi-report-name { color: #C8C6C4; font-size: 12px; }
   .pbi-right { display: flex; align-items: center; gap: 8px; }
+  .pbi-lbl { color: var(--mid); font-size: 11px; }
   .pbi-btn { background: none; border: 1px solid rgba(255,255,255,.2); color: #C8C6C4; font-size: 11px; padding: 3px 10px; border-radius: 2px; cursor: pointer; font-family: inherit; }
   .pbi-btn:hover { background: rgba(255,255,255,.08); }
   .pbi-select {
@@ -234,6 +235,13 @@
     .chart-grid, .cmp-charts { grid-template-columns: 1fr; }
     .pbi-filter-bar { display: none; }
   }
+  @media (max-width: 700px) {
+    /* The top bar wraps to two rows here, so only the tab strip stays pinned. */
+    .pbi-bar { position: static; }
+    .pbi-pages { top: 0; }
+    .pbi-right { flex-wrap: wrap; }
+    .pbi-lbl { display: none; }
+  }
   @media (max-width: 480px) {
     .pbi-report-name, .pbi-sep { display: none; }
     .kpi-value { font-size: 22px; }
@@ -258,6 +266,8 @@
   </div>
   <div class="pbi-right">
     <select class="pbi-select" id="quarterSel" aria-label="Period"></select>
+    <label class="pbi-lbl" for="vsSel">Compare with</label>
+    <select class="pbi-select" id="vsSel"></select>
     <button class="pbi-btn" id="copyLink" type="button">Copy link</button>
   </div>
 </header>
@@ -635,13 +645,17 @@ function periodLabel(q) {
 
 /* ===================== state <-> URL ===================== */
 const CMP = "cmp";
-const state = { quarter: null, view: null };
+// quarter: the quarter on screen. vs: the quarter it is compared against, or
+// null - a quarter is shown on its own until the reader picks one to compare.
+const state = { quarter: null, vs: null, view: null };
 let DATA = { rows: [], quarters: [], chapters: [] };
 
 function readURL() {
   const p = new URLSearchParams(location.search);
   const q = p.get("q");
   if (q) state.quarter = normQuarter(q);
+  const vs = p.get("vs");
+  if (vs) state.vs = normQuarter(vs);
   const v = p.get("view");
   if (v) state.view = slug(v);
 }
@@ -649,6 +663,7 @@ function readURL() {
 function writeURL() {
   const p = new URLSearchParams();
   if (state.quarter) p.set("q", state.quarter);
+  if (state.vs) p.set("vs", state.vs);
   if (state.view) p.set("view", state.view);
   history.replaceState(null, "", location.pathname + "?" + p.toString() + location.hash);
 }
@@ -657,17 +672,17 @@ function writeURL() {
 const rowsFor = q => DATA.rows.filter(r => r.quarter === q);
 const rowOf = (chapterSlug, q) => DATA.rows.find(r => r.quarter === q && r.chapterSlug === chapterSlug) || null;
 const chaptersIn = q => DATA.chapters.filter(c => rowOf(c.slug, q));
-// The previous quarter, only if the data actually has it.
-function prevQuarterOf(q) {
-  const p = previousQuarter(q);
-  return DATA.quarters.includes(p) ? p : null;
+// The quarter picked for comparison, only if it exists and differs from the one shown.
+function compareQuarter() {
+  return state.vs && state.vs !== state.quarter && DATA.quarters.includes(state.vs) ? state.vs : null;
 }
+const periodTitle = () => periodLabel(state.quarter) + (compareQuarter() ? " vs " + quarterLabel(compareQuarter()) : "");
 
 /* ===================== small render helpers ===================== */
-// Change vs the previous quarter. Rates compare in percentage points, counts in %.
-function deltaHTML(now, before, kind, prevQ) {
-  if (!prevQ) return "";
-  const vs = " vs " + quarterLabel(prevQ);
+// Change vs the comparison quarter. Rates compare in percentage points, counts in %.
+function deltaHTML(now, before, kind, vsQ) {
+  if (!vsQ) return "";
+  const vs = " vs " + quarterLabel(vsQ);
   if (now === null || now === undefined || before === null || before === undefined) {
     return '<div class="kpi-delta">Change' + vs + ": N/A</div>";
   }
@@ -698,7 +713,7 @@ function titleRow(title, accent, sub) {
   return '<div class="title-row"><div>' +
     '<div class="page-title">' + esc(title) + " <span>" + accent + "</span></div>" +
     '<div class="page-subtitle">' + sub + "</div></div>" +
-    '<div class="period-chip">' + periodLabel(state.quarter) + "</div></div>";
+    '<div class="period-chip">' + periodTitle() + "</div></div>";
 }
 
 function insightsVis(items) {
@@ -729,7 +744,7 @@ function chapterBadge(row, rows) {
   return "Active Chapter";
 }
 
-function chapterInsights(k, rows, prev, prevQ) {
+function chapterInsights(k, rows, prev, vsQ) {
   const items = [];
   if (k.largest_event_name && k.largest_event !== null) {
     items.push({ i: "🏆", t: "<strong>Highest-attendance event:</strong> " + esc(k.largest_event_name) + " — " + intFmt(k.largest_event) + " attendees." });
@@ -749,12 +764,12 @@ function chapterInsights(k, rows, prev, prevQ) {
   if (prev && prev.attendance && k.attendance !== null) {
     const ch = (k.attendance - prev.attendance) / prev.attendance * 100;
     items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
-      quarterLabel(prevQ) + " (" + intFmt(prev.attendance) + " → " + intFmt(k.attendance) + ")." });
+      quarterLabel(vsQ) + " (" + intFmt(prev.attendance) + " → " + intFmt(k.attendance) + ")." });
   }
   return items;
 }
 
-function networkInsights(rows, prevRows, prevQ) {
+function networkInsights(rows, vsRows, vsQ) {
   const items = [];
   const name = r => esc(chapterBySlug(r.chapterSlug).label);
   const lead = attendanceLeader(rows);
@@ -773,12 +788,12 @@ function networkInsights(rows, prevRows, prevQ) {
     const big = withLargest.reduce((a, b) => (b.largest_event > a.largest_event ? b : a));
     items.push({ i: "🌎", t: "<strong>" + name(big) + "</strong> holds the largest single event (" + intFmt(big.largest_event) + " attendees, \"" + esc(big.largest_event_name || "") + "\")." });
   }
-  if (prevRows) {
-    const now = aggregate(rows, "attendance"), before = aggregate(prevRows, "attendance");
+  if (vsRows) {
+    const now = aggregate(rows, "attendance"), before = aggregate(vsRows, "attendance");
     if (now !== null && before) {
       const ch = (now - before) / before * 100;
       items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Network attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
-        quarterLabel(prevQ) + " (" + intFmt(before) + " → " + intFmt(now) + ")." });
+        quarterLabel(vsQ) + " (" + intFmt(before) + " → " + intFmt(now) + ")." });
     }
   }
   return items;
@@ -787,22 +802,22 @@ function networkInsights(rows, prevRows, prevQ) {
 /* ===================== chapter page ===================== */
 function chapterBySlug(s) { return DATA.chapters.find(c => c.slug === s); }
 
-function chapterKpis(k, p, prevQ, c) {
+function chapterKpis(k, p, vsQ, c) {
   return '<div class="kpi-strip">' +
     kpiCard({ color: c, label: "Events Held", cls: "kpi-value accent", value: intFmt(k.events), note: "this period",
-      delta: deltaHTML(k.events, p && p.events, "int", prevQ) }) +
+      delta: deltaHTML(k.events, p && p.events, "int", vsQ) }) +
     kpiCard({ color: c, label: "Total Attendees", cls: "kpi-value", value: intFmt(k.attendance),
       note: k.avg_attendance !== null ? "~" + dec1(k.avg_attendance) + " per event" : "",
-      delta: deltaHTML(k.attendance, p && p.attendance, "int", prevQ) }) +
+      delta: deltaHTML(k.attendance, p && p.attendance, "int", vsQ) }) +
     kpiCard({ color: c, label: "New LinkedIn Followers", cls: "kpi-value green", value: k.new_li_followers === null ? "N/A" : "+" + intFmt(k.new_li_followers),
       note: "current total: " + intFmt(k.total_li_followers),
-      delta: deltaHTML(k.new_li_followers, p && p.new_li_followers, "int", prevQ) }) +
+      delta: deltaHTML(k.new_li_followers, p && p.new_li_followers, "int", vsQ) }) +
     kpiCard({ color: c, label: "LinkedIn Impressions", cls: k.li_impressions === null ? "kpi-value gray" : "kpi-value", value: intFmt(k.li_impressions),
       note: !k.li_posts ? "no posts tracked" : intFmt(k.li_posts) + " posts published",
-      delta: deltaHTML(k.li_impressions, p && p.li_impressions, "int", prevQ) }) +
+      delta: deltaHTML(k.li_impressions, p && p.li_impressions, "int", vsQ) }) +
     kpiCard({ color: c, label: "Avg. Engagement Rate LI", cls: k.li_engagement_rate === null ? "kpi-value gray" : "kpi-value",
       style: k.li_engagement_rate !== null ? "color:" + c : "", value: pctFmt(k.li_engagement_rate), note: "LinkedIn",
-      delta: deltaHTML(k.li_engagement_rate, p && p.li_engagement_rate, "pct", prevQ) }) +
+      delta: deltaHTML(k.li_engagement_rate, p && p.li_engagement_rate, "pct", vsQ) }) +
     "</div>";
 }
 
@@ -834,18 +849,30 @@ function highlightsVis(k, c) {
   return '<div class="vis"><div class="vis-title">① Events This Period <span class="vis-title-tag">Highlights</span></div>' + body + "</div>";
 }
 
-// ② Quarter over quarter for this chapter: up to the last four quarters
-// ending at the selected one.
+// ② Single quarter: this chapter's share of the network. Comparing quarters:
+// the two picked quarters side by side.
 const TREND_METRICS = [
   ["attendance", "Attendees"], ["events", "Events held"],
   ["new_li_followers", "New LinkedIn followers"], ["li_posts", "LinkedIn posts"]
 ];
-function trendVis(ch, c) {
-  const qs = DATA.quarters.filter(q => quarterRank(q) <= quarterRank(state.quarter)).slice(-4);
-  const head = '<div class="vis"><div class="vis-title">② Quarter over Quarter <span class="vis-title-tag">Clustered bar</span></div>';
-  if (qs.length < 2) {
-    return head + '<div class="vis-empty">Only one quarter on record so far —<br>the trend appears once the next quarter is exported.</div></div>';
-  }
+function shareVis(ch, c, rows) {
+  const k = rowOf(ch.slug, state.quarter);
+  const metrics = TREND_METRICS.concat([["li_impressions", "LinkedIn impressions"]]);
+  const body = metrics.map(([key, label]) => {
+    const total = aggregate(rows, key);
+    const share = k[key] === null || !total ? null : k[key] / total;
+    return '<div class="hb-row"><span class="hb-lbl">' + label + '</span><div class="hb-track">' +
+      (share === null ? "" : '<div class="hb-fill" style="width:' + Math.max(share * 100, 2).toFixed(1) + "%;background:" + c + '"></div>') +
+      '</div><span class="hb-val">' + (share === null ? "N/A" : (share * 100).toFixed(1) + "%") + "</span></div>";
+  }).join("");
+  return '<div class="vis"><div class="vis-title">② Share of Network <span class="vis-title-tag">% of all chapters</span></div>' +
+    '<div class="hbar">' + body + "</div>" +
+    '<div class="legend-row">Pick a quarter in "Compare with" to see quarter-over-quarter change.</div></div>';
+}
+
+function trendVis(ch, c, vsQ) {
+  const qs = [vsQ, state.quarter].sort((a, b) => quarterRank(a) - quarterRank(b));
+  const head = '<div class="vis"><div class="vis-title">② Quarter Comparison <span class="vis-title-tag">Clustered bar</span></div>';
   const shade = q => (q === state.quarter ? c : c + "66");
   const groups = TREND_METRICS.map(([key, label]) => {
     const vals = qs.map(q => { const r = rowOf(ch.slug, q); return r ? r[key] : null; });
@@ -913,15 +940,15 @@ function gaugeVis(k, c, rows) {
 
 function chapterView(ch) {
   const q = state.quarter, rows = rowsFor(q), k = rowOf(ch.slug, q);
-  const prevQ = prevQuarterOf(q), p = prevQ ? rowOf(ch.slug, prevQ) : null;
+  const vsQ = compareQuarter(), p = vsQ ? rowOf(ch.slug, vsQ) : null;
   const c = ch.color;
   const sub = intFmt(k.events || 0) + " event(s) · " + intFmt(k.attendance || 0) + " attendees · " +
     (k.li_engagement_rate !== null ? "engagement " + pctFmt(k.li_engagement_rate) : "no engagement tracked") +
     " · " + chapterBadge(k, rows);
   return titleRow(ch.label, "Chapter", sub) +
-    chapterKpis(k, p, prevQ, c) +
-    '<div class="chart-grid">' + highlightsVis(k, c) + trendVis(ch, c) + linkedinVis(k, c, rows) + gaugeVis(k, c, rows) + "</div>" +
-    insightsVis(chapterInsights(k, rows, p, prevQ));
+    chapterKpis(k, p, vsQ, c) +
+    '<div class="chart-grid">' + highlightsVis(k, c) + (vsQ ? trendVis(ch, c, vsQ) : shareVis(ch, c, rows)) + linkedinVis(k, c, rows) + gaugeVis(k, c, rows) + "</div>" +
+    insightsVis(chapterInsights(k, rows, p, vsQ));
 }
 
 /* ===================== comparison page ===================== */
@@ -963,9 +990,9 @@ function engagementBars(chs, q) {
 
 function compareView() {
   const q = state.quarter, rows = rowsFor(q), chs = chaptersIn(q);
-  const prevQ = prevQuarterOf(q), prevRows = prevQ ? rowsFor(prevQ) : null;
+  const vsQ = compareQuarter(), vsRows = vsQ ? rowsFor(vsQ) : null;
   const net = key => aggregate(rows, key);
-  const before = key => (prevRows ? aggregate(prevRows, key) : null);
+  const before = key => (vsRows ? aggregate(vsRows, key) : null);
   const blue = "#118DFF";
   const cell = (v, plus) => v === null
     ? '<span class="cmp-val na">N/A</span>'
@@ -988,11 +1015,11 @@ function compareView() {
 
   return titleRow("Chapter", "Comparison", "All chapters · same KPIs · " + periodLabel(q)) +
     '<div class="net-kpi">' +
-      kpiCard({ color: blue, label: "Total Events (network)", cls: "kpi-value accent", value: intFmt(net("events")), note: "all chapters", delta: deltaHTML(net("events"), before("events"), "int", prevQ) }) +
-      kpiCard({ color: blue, label: "Total Attendees", cls: "kpi-value", value: intFmt(net("attendance")), note: "network sum", delta: deltaHTML(net("attendance"), before("attendance"), "int", prevQ) }) +
-      kpiCard({ color: blue, label: "+LI Followers (network)", cls: "kpi-value green", value: "+" + intFmt(net("new_li_followers")), note: "sum across chapters", delta: deltaHTML(net("new_li_followers"), before("new_li_followers"), "int", prevQ) }) +
-      kpiCard({ color: blue, label: "Posts Published (network)", cls: "kpi-value", value: intFmt(net("li_posts")), note: "sum across chapters", delta: deltaHTML(net("li_posts"), before("li_posts"), "int", prevQ) }) +
-      kpiCard({ color: blue, label: "Largest Event", cls: "kpi-value accent", value: intFmt(net("largest_event")), note: "attendees, single event", delta: deltaHTML(net("largest_event"), before("largest_event"), "int", prevQ) }) +
+      kpiCard({ color: blue, label: "Total Events (network)", cls: "kpi-value accent", value: intFmt(net("events")), note: "all chapters", delta: deltaHTML(net("events"), before("events"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Total Attendees", cls: "kpi-value", value: intFmt(net("attendance")), note: "network sum", delta: deltaHTML(net("attendance"), before("attendance"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "+LI Followers (network)", cls: "kpi-value green", value: "+" + intFmt(net("new_li_followers")), note: "sum across chapters", delta: deltaHTML(net("new_li_followers"), before("new_li_followers"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Posts Published (network)", cls: "kpi-value", value: intFmt(net("li_posts")), note: "sum across chapters", delta: deltaHTML(net("li_posts"), before("li_posts"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Largest Event", cls: "kpi-value accent", value: intFmt(net("largest_event")), note: "attendees, single event", delta: deltaHTML(net("largest_event"), before("largest_event"), "int", vsQ) }) +
     "</div>" +
     '<div class="cmp-mini-row">' + minis + "</div>" +
     '<div class="cmp-charts">' +
@@ -1001,7 +1028,7 @@ function compareView() {
         '<div class="legend-row"><span><i style="background:#605E5C"></i>Attendees (chapter colour)</span><span><i style="background:#A19F9D"></i>+LI Followers</span></div></div>' +
       '<div class="vis"><div class="vis-title">Engagement Rate LI <span class="vis-title-tag">Horizontal bar</span></div>' + engagementBars(chs, q) + "</div>" +
     "</div>" +
-    insightsVis(networkInsights(rows, prevRows, prevQ));
+    insightsVis(networkInsights(rows, vsRows, vsQ));
 }
 
 /* ===================== page shell ===================== */
@@ -1024,7 +1051,7 @@ function renderTabs() {
   add(CMP, "⊞ Comparison");
   const bar = document.createElement("div");
   bar.className = "pbi-filter-bar";
-  bar.innerHTML = '<span>Period:</span><span class="filter-chip">' + periodLabel(state.quarter) + "</span>";
+  bar.innerHTML = '<span>Period:</span><span class="filter-chip">' + periodTitle() + "</span>";
   tabs.append(bar);
 }
 
@@ -1037,6 +1064,21 @@ function render() {
   $("canvas").innerHTML = state.view === CMP ? compareView() : chapterView(chapterBySlug(state.view));
 }
 
+function fillCompareOptions() {
+  const vs = $("vsSel");
+  vs.textContent = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "No comparison";
+  vs.append(none);
+  for (const q of DATA.quarters) {
+    if (q === state.quarter) continue;
+    const o = document.createElement("option");
+    o.value = q; o.textContent = periodLabel(q);
+    vs.append(o);
+  }
+  vs.value = compareQuarter() || "";
+}
+
 function buildControls() {
   const qs = $("quarterSel");
   qs.textContent = "";
@@ -1046,7 +1088,14 @@ function buildControls() {
     qs.append(o);
   }
   qs.value = state.quarter;
-  qs.addEventListener("change", () => { state.quarter = qs.value; writeURL(); render(); });
+  qs.addEventListener("change", () => {
+    state.quarter = qs.value;
+    if (state.vs === state.quarter) state.vs = null;
+    fillCompareOptions(); writeURL(); render();
+  });
+
+  fillCompareOptions();
+  $("vsSel").addEventListener("change", () => { state.vs = $("vsSel").value || null; writeURL(); render(); });
 }
 
 /* ===================== copy link ===================== */
@@ -1110,6 +1159,7 @@ function renderSourceChip(loaded) {
   if (!state.quarter || !DATA.quarters.includes(state.quarter)) {
     state.quarter = DATA.quarters[DATA.quarters.length - 1];
   }
+  state.vs = compareQuarter();
 
   checkDataRules(DATA.rows);
   renderSourceChip(loaded);

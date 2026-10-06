@@ -1,75 +1,73 @@
 /**
- * SOMOS Latinx in Tech · Chapter Performance Dashboard — read-only data feed.
+ * SOMOS Latinx in Tech · Chapter Performance Dashboard — public mirror feed.
  *
- * Code ownership: Data Analytics Team · laura.lugo@somoslatinxintech.com
- *
- * This is a SEPARATE file inside the same Apps Script project as
- * Consolidation.gs (the KPI pipeline that owns "unique_events",
- * "KPIs_Consolidado" and "KPIs_Historico"). It does not touch that pipeline's
- * logic or data — it only reads "KPIs_Historico" and serves it as JSON for
- * index.html to fetch. Add it via the Apps Script editor's "+" next to
- * Files → Script, name it DashboardFeed, and paste this in.
- *
- * A project can only have one doGet(), so this is the only file allowed to
- * define one — Consolidation.gs has none, so there's no conflict.
+ * This is the SAME logic as apps-script/DashboardFeed.gs, adapted to run from
+ * a DIFFERENT Google account than the one that owns Master_Staging_Sheet.
  *
  * ---------------------------------------------------------------------------
- * DEPLOY
+ * WHY THIS FILE EXISTS
  * ---------------------------------------------------------------------------
- *  1. Master_Staging_Sheet → Extensions → Apps Script.
- *  2. Files → "+" → Script → name it DashboardFeed → paste this file's content.
- *     (Leave Consolidation.gs exactly as it is — nothing here reads or writes
- *     it.)
- *  3. Run ▶ testFeed once (top toolbar, function dropdown → testFeed) to
- *     authorize the script and sanity-check KPIs_Historico. View → Logs shows
- *     the periods found, a row count, and any data-rule warnings.
- *  4. Deploy → New deployment → type "Web app".
- *       Execute as:      Me
- *       Who has access:  Anyone   (required — the dashboard calls it unauthenticated;
- *                                  this only exposes the KPI numbers below, not
- *                                  edit access to the sheet)
- *  5. Copy the /exec URL into CONFIG.DATA_URL in index.html and commit.
+ * somoslatinxintech.com's Google Workspace forces sign-in on both Apps Script
+ * "Anyone" web apps and "Publish to web" links, regardless of the access
+ * setting chosen at deploy time — a domain-wide policy, not something fixable
+ * from the deploy dialog. Neither mechanism can serve this org's own files to
+ * an unauthenticated static page.
  *
- * Re-deploy (Manage deployments → edit → Version: New version) after any edit
- * to this file. A new quarter needs no re-deploy — just run
- * runCleaningAndConsolidation() in Consolidation.gs after updating its
- * CURRENT_PERIOD / CURRENT_YEAR, and the next dashboard reload picks it up.
+ * The workaround: a separate, minimal Google Sheet — the "mirror" — owned by
+ * anyone, containing ONLY a copy of KPIs_Historico (never unique_events or
+ * all_events, which carry attendee PII: names, emails). Consolidation.gs's
+ * syncPublicFeed_() copies KPIs_Historico into that mirror's own
+ * "KPIs_Historico" tab on every run, once its PUBLIC_FEED_SHEET_ID constant
+ * is filled in. The mirror is shared as Viewer with an external, non-Workspace
+ * Google account — this script is deployed FROM that external account,
+ * against the mirror. Not being subject to somoslatinxintech.com's policy, a
+ * deployment from that account can actually be made public.
  *
  * ---------------------------------------------------------------------------
- * EXPECTED SHAPE OF "KPIs_Historico"
+ * SET UP (one time)
  * ---------------------------------------------------------------------------
- * One row per chapter per period, header row first. Columns (see
- * Consolidation.gs's KPI_HEADERS — this file mirrors that order but doesn't
- * depend on it, since it matches by header name):
+ *  1. From ANY Google account, create a new blank Google Sheet. Name it
+ *     something like "SOMOS Dashboard - Public Feed". Copy its ID out of the
+ *     URL (…/spreadsheets/d/<THIS PART>/edit).
+ *  2. In Master_Staging_Sheet's Apps Script project (Consolidation.gs), set
+ *     PUBLIC_FEED_SHEET_ID to that ID, save, then run ▶ syncPublicFeedNow
+ *     once to populate the mirror immediately (Consolidation.gs's owning
+ *     account needs Editor access on the mirror to write to it — share it
+ *     with that account as Editor, or just create the mirror FROM that
+ *     account in the first place).
+ *  3. Share the mirror sheet as **Viewer** with the external account that
+ *     will run this script (e.g. a personal Gmail address) — File → Share.
+ *  4. From THAT external account: open the mirror sheet → Extensions →
+ *     Apps Script. (If Viewer access hides that menu, use script.google.com
+ *     → New project instead — a standalone project not opened via the sheet
+ *     works fine, since MIRROR_SHEET_ID below opens it by ID.)
+ *  5. Paste this file's content in as Code.gs (or any name) in that project.
+ *  6. Set MIRROR_SHEET_ID below to the same ID from step 1.
+ *  7. Run ▶ testFeed once to authorize (this account only needs read access
+ *     to the mirror) and sanity-check. View → Logs shows the row count.
+ *  8. Deploy → New deployment → Web app. Execute as: Me. Who has access:
+ *     **Anyone**. Deploy, copy the /exec URL.
+ *  9. Paste that URL into CONFIG.DATA_URL in index.html, commit, push.
  *
- *   Chapter | Period | Events Held | Total Attendees |
- *   Average Attendees per Event | Largest Event (Attendees) |
- *   Largest Event Name | New LinkedIn Followers | Total LinkedIn Followers |
- *   LinkedIn Impressions | Average LinkedIn Engagement Rate |
- *   LinkedIn Posts Published
- *
- * "Period" is Consolidation.gs's periodRange.label, e.g. "Q2_2026". Cells
- * holding the literal string "N/A" (Consolidation.gs's NA_LABEL) become
- * null in the JSON, never 0.
- *
- * "Average LinkedIn Engagement Rate" is a decimal (0.0185 = 1.85%). LinkedIn
- * occasionally exports this as a percentage instead — a value above 1 is
- * flagged in `warnings` below rather than silently reinterpreted, and the
- * dashboard shows the same warning as a banner.
+ * Re-run step 2's syncPublicFeedNow (or the normal
+ * runCleaningAndConsolidation) after every quarter's consolidation to refresh
+ * the mirror — this script only reads, it never triggers a sync itself.
  *
  * ---------------------------------------------------------------------------
  * ENDPOINT
  * ---------------------------------------------------------------------------
- *   GET  <exec-url>                  → every period in KPIs_Historico
+ *   GET  <exec-url>                  → every period in the mirror
  *   GET  <exec-url>?period=2026_Q2   → one period only
  *   GET  <exec-url>?debug=1          → adds unmapped_headers / skipped_rows
  */
 
+/** Fill in with the mirror spreadsheet's ID (see step 6 above). */
+var MIRROR_SHEET_ID = '';
+
 var HISTORY_SHEET_NAME = 'KPIs_Historico';
 
-/** Canonical field → header text in KPIs_Historico. Matched by exact header
- *  name (case-insensitive, punctuation-insensitive) so re-wording the sheet
- *  header slightly ("Events held" vs "Events Held") doesn't break the feed. */
+/** Canonical field → header text. Matched case/punctuation-insensitively, same
+ *  as Consolidation.gs's KPI_HEADERS and DashboardFeed.gs's FIELD_HEADERS. */
 var FIELD_HEADERS = {
   chapter: 'chapter',
   period: 'period',
@@ -110,12 +108,15 @@ function doGet(e) {
 }
 
 function buildFeedPayload(params) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!MIRROR_SHEET_ID) {
+    throw new Error('MIRROR_SHEET_ID is empty - set it to the mirror spreadsheet\'s ID first.');
+  }
+  var ss = SpreadsheetApp.openById(MIRROR_SHEET_ID);
   var sheet = ss.getSheetByName(HISTORY_SHEET_NAME);
   if (!sheet) {
     throw new Error(
-      '"' + HISTORY_SHEET_NAME + '" not found. Run runCleaningAndConsolidation() ' +
-      'in Consolidation.gs at least once — it creates this tab automatically.'
+      '"' + HISTORY_SHEET_NAME + '" not found in the mirror. Run syncPublicFeedNow() (or ' +
+      'runCleaningAndConsolidation()) in Consolidation.gs at least once to populate it.'
     );
   }
 
@@ -128,8 +129,7 @@ function buildFeedPayload(params) {
 
   var payload = {
     generated_at: new Date().toISOString(),
-    source: 'KPIs_Historico · ' + ss.getName(),
-    spreadsheet_id: ss.getId(),
+    source: 'KPIs_Historico · public mirror',
     quarters: quarters,
     row_count: rows.length,
     warnings: parsed.warnings,
@@ -166,7 +166,7 @@ function readHistorySheet(sheet) {
   }
 
   if (colOf.chapter === undefined || colOf.period === undefined) {
-    out.warnings.push('KPIs_Historico is missing a Chapter or Period column — check the header row.');
+    out.warnings.push('Mirror sheet is missing a Chapter or Period column — check the header row.');
     return out;
   }
 

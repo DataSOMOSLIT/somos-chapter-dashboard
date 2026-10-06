@@ -1,14 +1,18 @@
 /**
- * SOMOS Latinx in Tech · Chapter Performance Dashboard — read-only data feed.
+ * SOMOS Latinx in Tech · Chapter Performance Dashboard — web app.
  *
  * Code ownership: Data Analytics Team · laura.lugo@somoslatinxintech.com
  *
  * This is a SEPARATE file inside the same Apps Script project as
  * Consolidation.gs (the KPI pipeline that owns "unique_events",
  * "KPIs_Consolidado" and "KPIs_Historico"). It does not touch that pipeline's
- * logic or data — it only reads "KPIs_Historico" and serves it as JSON for
- * index.html to fetch. Add it via the Apps Script editor's "+" next to
- * Files → Script, name it DashboardFeed, and paste this in.
+ * logic or data — it only reads "KPIs_Historico" and serves the dashboard
+ * (Dashboard.html, an HTML file in the same project) through HtmlService.
+ *
+ * The KPI numbers never leave Google: the page is served from script.google.com
+ * to signed-in somoslatinxintech.com accounts only, and fetches its data with
+ * google.script.run → getDashboardData() below. Nothing is published to the
+ * web and no copy of the data lives on GitHub.
  *
  * A project can only have one doGet(), so this is the only file allowed to
  * define one — Consolidation.gs has none, so there's no conflict.
@@ -17,23 +21,28 @@
  * DEPLOY
  * ---------------------------------------------------------------------------
  *  1. Master_Staging_Sheet → Extensions → Apps Script.
- *  2. Files → "+" → Script → name it DashboardFeed → paste this file's content.
+ *  2. Files → "+" → Script → name it DashboardFeed → paste this file's content
+ *     (or replace the old DashboardFeed's content if it is already there).
+ *  3. Files → "+" → HTML → name it Dashboard (the editor adds ".html") →
+ *     paste apps-script/Dashboard.html's content.
  *     (Leave Consolidation.gs exactly as it is — nothing here reads or writes
  *     it.)
- *  3. Run ▶ testFeed once (top toolbar, function dropdown → testFeed) to
- *     authorize the script and sanity-check KPIs_Historico. View → Logs shows
- *     the periods found, a row count, and any data-rule warnings.
- *  4. Deploy → New deployment → type "Web app".
- *       Execute as:      Me
- *       Who has access:  Anyone   (required — the dashboard calls it unauthenticated;
- *                                  this only exposes the KPI numbers below, not
- *                                  edit access to the sheet)
- *  5. Copy the /exec URL into CONFIG.DATA_URL in index.html and commit.
+ *  4. Run ▶ testFeed once (function dropdown → testFeed) to authorize the
+ *     script and sanity-check KPIs_Historico. View → Logs shows the periods
+ *     found, a row count, and any data-rule warnings.
+ *  5. Deploy → New deployment → type "Web app".
+ *       Execute as:      Me   (the page reads KPIs_Historico with the
+ *                              deployer's access, so viewers don't need
+ *                              access to Master_Staging_Sheet itself)
+ *       Who has access:  Anyone within somoslatinxintech.com
+ *  6. Open the /exec URL. That URL is the dashboard; share it inside SOMOS.
  *
  * Re-deploy (Manage deployments → edit → Version: New version) after any edit
- * to this file. A new quarter needs no re-deploy — just run
- * runCleaningAndConsolidation() in Consolidation.gs after updating its
- * CURRENT_PERIOD / CURRENT_YEAR, and the next dashboard reload picks it up.
+ * to this file or Dashboard.html — the /exec URL stays the same. A new quarter
+ * needs no re-deploy: run runCleaningAndConsolidation() in Consolidation.gs
+ * after updating its CURRENT_PERIOD / CURRENT_YEAR, and the next page load
+ * picks it up. (The "Test deployments" /dev URL always runs the latest saved
+ * code, handy for checking changes before re-deploying.)
  *
  * ---------------------------------------------------------------------------
  * EXPECTED SHAPE OF "KPIs_Historico"
@@ -50,7 +59,7 @@
  *
  * "Period" is Consolidation.gs's periodRange.label, e.g. "Q2_2026". Cells
  * holding the literal string "N/A" (Consolidation.gs's NA_LABEL) become
- * null in the JSON, never 0.
+ * null, never 0.
  *
  * "Average LinkedIn Engagement Rate" is a decimal (0.0185 = 1.85%). LinkedIn
  * occasionally exports this as a percentage instead — a value above 1 is
@@ -58,11 +67,12 @@
  * dashboard shows the same warning as a banner.
  *
  * ---------------------------------------------------------------------------
- * ENDPOINT
+ * URL PARAMETERS (read by Dashboard.html, kept in the /exec URL for sharing)
  * ---------------------------------------------------------------------------
- *   GET  <exec-url>                  → every period in KPIs_Historico
- *   GET  <exec-url>?period=2026_Q2   → one period only
- *   GET  <exec-url>?debug=1          → adds unmapped_headers / skipped_rows
+ *   <exec-url>?q=2026_Q3                     → that quarter
+ *   <exec-url>?q=2026_Q3&vs=2026_Q2          → compared with Q2
+ *   <exec-url>?q=2026_Q3&view=toronto        → straight to a chapter page
+ *   <exec-url>?view=cmp                      → the Comparison page
  */
 
 var HISTORY_SHEET_NAME = 'KPIs_Historico';
@@ -92,11 +102,19 @@ var NUMERIC_FIELDS = [
   'li_engagement_rate', 'li_posts'
 ];
 
-function doGet(e) {
-  var params = (e && e.parameter) || {};
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Dashboard')
+    .setTitle('SOMOS Latinx in Tech · Chapter Performance Dashboard')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Called from Dashboard.html via google.script.run. Errors come back as
+ *  { error } rather than a thrown exception so the page can show the message
+ *  (a thrown one reaches the page too, but with Google's wording around it). */
+function getDashboardData() {
   var payload;
   try {
-    payload = buildFeedPayload(params);
+    payload = buildFeedPayload({});
   } catch (err) {
     payload = {
       error: String((err && err.message) || err),
@@ -104,9 +122,8 @@ function doGet(e) {
       rows: []
     };
   }
-  return ContentService
-    .createTextOutput(JSON.stringify(payload))
-    .setMimeType(ContentService.MimeType.JSON);
+  payload.app_url = ScriptApp.getService().getUrl();
+  return payload;
 }
 
 function buildFeedPayload(params) {
@@ -129,7 +146,6 @@ function buildFeedPayload(params) {
   var payload = {
     generated_at: new Date().toISOString(),
     source: 'KPIs_Historico · ' + ss.getName(),
-    spreadsheet_id: ss.getId(),
     quarters: quarters,
     row_count: rows.length,
     warnings: parsed.warnings,
@@ -258,4 +274,20 @@ function testFeed() {
   Logger.log('warnings: %s', JSON.stringify(p.warnings, null, 2));
   Logger.log('debug: %s', JSON.stringify(p.debug, null, 2));
   Logger.log('first row: %s', JSON.stringify(p.rows[0], null, 2));
+}
+
+/* ------------------------------------------------------------------------
+   Run from the editor when the /exec page comes up blank: checks that the
+   Dashboard HTML file exists and isn't empty, that getDashboardData() works,
+   and which /exec URL the latest saved code belongs to.
+   ------------------------------------------------------------------------ */
+function testPage() {
+  var html = HtmlService.createHtmlOutputFromFile('Dashboard').getContent();
+  Logger.log('Dashboard.html: %s characters', html.length);
+  Logger.log('has server bridge: %s', html.indexOf('getDashboardData') !== -1);
+  Logger.log('starts with: %s', html.slice(0, 60));
+  Logger.log('ends with: %s', html.slice(-40));
+  var d = getDashboardData();
+  Logger.log('getDashboardData: %s rows, quarters %s, error %s', d.rows.length, JSON.stringify(d.quarters), d.error || 'none');
+  Logger.log('app_url: %s', d.app_url);
 }

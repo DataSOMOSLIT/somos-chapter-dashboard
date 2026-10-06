@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOMOS Latinx in Tech · Chapter Performance Dashboard</title>
+<meta name="description" content="Interactive dashboard for SOMOS Latinx in Tech chapter KPIs.">
+<!--
+  Served by apps-script/DashboardFeed.gs's doGet() through HtmlService, so only
+  signed-in somoslatinxintech.com accounts can open it. No KPI data lives in
+  this file: it asks the server for KPIs_Historico via google.script.run on
+  every load. (HtmlService sets the tab title and viewport from doGet(); the
+  tags above only matter when the file is opened directly.)
+
+  Visual design mirrors SOMOS_Dashboard_Generator.html (the Data Analytics
+  Team's Power BI style report): one page per chapter plus a Comparison page.
+  Unlike the generator, this page reads the aggregated KPIs_Historico tab -
+  never unique_events, which carries attendee-level data - so the generator's
+  event timeline and in-person/online donut are replaced by the largest-event
+  highlight and a quarter-over-quarter trend.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --canvas:   #000000;
+    --white:    #1A1A1A;
+    --ink:      #F3F2F1;
+    --mid:      #A19F9D;
+    --light:    #605E5C;
+    --line:     rgba(255,255,255,0.09);
+    --line2:    rgba(255,255,255,0.07);
+    --pbi-blue: #118DFF;
+    --green:    #107C10;
+    --green-tx: #3FBF3F;
+    --red-tx:   #F1707A;
+    --r: 4px;
+    --shadow: 0 2px 8px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--canvas); color: var(--ink); font-size: 13px; }
+
+  /* ── PBI TOPBAR ── */
+  .pbi-bar {
+    background: #201F1E;
+    min-height: 40px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    padding: 4px 14px;
+    position: sticky; top: 0; z-index: 200;
+  }
+  .pbi-left { display: flex; align-items: center; gap: 12px; }
+  .pbi-logo { display: flex; align-items: center; gap: 6px; }
+  .pbi-logo svg { width: 18px; height: 18px; }
+  .pbi-logo-text { color: #F3F2F1; font-size: 13px; font-weight: 600; letter-spacing: -.2px; }
+  .pbi-sep { width: 1px; height: 20px; background: rgba(255,255,255,.15); }
+  .pbi-report-name { color: #C8C6C4; font-size: 12px; }
+  .pbi-right { display: flex; align-items: center; gap: 8px; }
+  .pbi-lbl { color: var(--mid); font-size: 11px; }
+  .pbi-btn { background: none; border: 1px solid rgba(255,255,255,.2); color: #C8C6C4; font-size: 11px; padding: 3px 10px; border-radius: 2px; cursor: pointer; font-family: inherit; }
+  .pbi-btn:hover { background: rgba(255,255,255,.08); }
+  .pbi-select {
+    background: #111111; border: 1px solid rgba(255,255,255,.2); color: #C8C6C4;
+    font-size: 11px; padding: 3px 8px; border-radius: 2px; font-family: inherit; cursor: pointer;
+  }
+  .pbi-btn:focus-visible, .pbi-select:focus-visible, .pbi-page-tab:focus-visible { outline: 2px solid var(--pbi-blue); outline-offset: 1px; }
+
+  /* ── PBI PAGE TABS ── */
+  .pbi-pages {
+    background: #111111;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line2);
+    display: flex; align-items: stretch;
+    padding: 0 14px; gap: 0;
+    position: sticky; top: 40px; z-index: 199;
+    overflow-x: auto;
+  }
+  .pbi-page-tab {
+    padding: 0 16px; height: 34px; font-size: 12px; color: var(--mid);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; transition: all .12s;
+    font-family: inherit;
+    background: none; border-left: none; border-right: none; border-top: none;
+  }
+  .pbi-page-tab:hover { color: var(--ink); background: #222222; }
+  .pbi-page-tab.active { color: var(--ink); border-bottom-color: var(--pbi-blue); font-weight: 600; }
+  .tab-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .pbi-filter-bar {
+    margin-left: auto; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--light); padding: 0 4px 0 16px; white-space: nowrap;
+  }
+  .filter-chip {
+    background: #0D1B2A; border: 1px solid rgba(17,141,255,0.3); color: var(--pbi-blue);
+    font-size: 10px; padding: 2px 8px; border-radius: 2px;
+  }
+
+  /* ── CANVAS ── */
+  .canvas { padding: 14px 16px 24px; }
+  .loading { color: var(--mid); padding: 40px 0; text-align: center; }
+
+  /* ── TITLE CARD ── */
+  .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .page-title { font-size: 20px; font-weight: 700; color: #F3F2F1; letter-spacing: -.3px; line-height: 1; }
+  .page-title span { color: var(--pbi-blue); }
+  .page-subtitle { font-size: 11px; color: var(--mid); margin-top: 3px; }
+  .period-chip {
+    background: #1A1A1A; border: 1px solid var(--line);
+    font-size: 11px; color: var(--mid); padding: 4px 10px; border-radius: 2px;
+    box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .period-chip::before { content:''; width:6px; height:6px; border-radius:50%; background: var(--pbi-blue); display:block; }
+
+  /* ── KPI CARDS ── */
+  .kpi-strip, .net-kpi { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 12px; }
+  .kpi-card {
+    background: var(--white); border-radius: var(--r);
+    box-shadow: var(--shadow); padding: 14px 16px;
+    border-top: 3px solid var(--cc, var(--pbi-blue));
+    position: relative;
+  }
+  .kpi-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--mid); margin-bottom: 6px; }
+  .kpi-value { font-size: 28px; font-weight: 700; line-height: 1; color: #F3F2F1; }
+  .kpi-value.accent { color: var(--cc, var(--pbi-blue)); }
+  .kpi-value.green  { color: var(--green); }
+  .kpi-value.gray   { color: var(--light); font-size: 18px; }
+  .kpi-note { font-size: 10px; color: var(--light); margin-top: 4px; }
+  .kpi-delta { font-size: 10px; margin-top: 4px; font-weight: 600; color: var(--mid); }
+  .kpi-delta.up   { color: var(--green-tx); }
+  .kpi-delta.down { color: var(--red-tx); }
+
+  /* ── CHART GRID ── */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .vis { background: var(--white); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px; min-width: 0; }
+  .vis-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--mid); margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .vis-title-tag {
+    background: rgba(255,255,255,0.07); font-size: 9px; color: var(--light);
+    padding: 1px 6px; border-radius: 2px; font-weight: 400;
+    text-transform: none; letter-spacing: 0; white-space: nowrap;
+  }
+  .vis-empty { font-size: 12px; color: var(--light); padding: 20px 0; text-align: center; line-height: 1.6; }
+
+  /* ── HIGHLIGHTS (timeline style) ── */
+  .tl { display: flex; flex-direction: column; }
+  .tl-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line2); }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-date { font-size: 10px; color: var(--light); min-width: 36px; padding-top: 2px; }
+  .tl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+  .tl-info { flex: 1; min-width: 0; }
+  .tl-name { font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .tl-tag { display: inline-block; font-size: 9px; background: rgba(255,255,255,0.07); color: var(--mid); padding: 1px 5px; border-radius: 2px; margin-top: 3px; }
+  .tl-att { font-size: 18px; font-weight: 700; min-width: 30px; text-align: right; }
+  .tl-att-lbl { font-size: 9px; color: var(--light); text-align: right; }
+  .tl-footer { display: flex; justify-content: space-between; font-size: 11px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .tl-footer-lbl { color: var(--mid); }
+  .tl-footer-val { font-weight: 700; }
+
+  /* ── HORIZONTAL BARS ── */
+  .hbar { display: flex; flex-direction: column; gap: 8px; }
+  .hb-row { display: flex; align-items: center; gap: 8px; }
+  .hb-lbl { font-size: 11px; color: var(--mid); min-width: 96px; }
+  .hb-track { flex: 1; height: 16px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .hb-fill { height: 100%; border-radius: 2px; display: flex; align-items: center; padding-right: 5px; justify-content: flex-end; }
+  .hb-text { font-size: 9px; font-weight: 700; color: white; }
+  .hb-val { font-size: 11px; color: var(--mid); min-width: 46px; text-align: right; font-weight: 600; }
+
+  /* ── QUARTER TREND ── */
+  .qt { display: flex; flex-direction: column; gap: 10px; }
+  .qt-group-lbl { font-size: 10px; color: var(--mid); font-weight: 600; margin-bottom: 3px; }
+  .qt-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .qt-q { font-size: 9px; color: var(--light); min-width: 22px; }
+  .qt-track { flex: 1; height: 10px; }
+  .qt-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+  .qt-val { font-size: 11px; color: var(--ink); min-width: 46px; text-align: right; font-weight: 600; }
+  .legend-row { display: flex; gap: 16px; margin-top: 10px; font-size: 10px; color: var(--mid); flex-wrap: wrap; }
+  .legend-row span { display: flex; align-items: center; gap: 4px; }
+  .legend-row i { width: 10px; height: 10px; display: inline-block; border-radius: 1px; }
+
+  /* ── GAUGE ── */
+  .gauge-body { display: flex; flex-direction: column; align-items: center; }
+  .gauge-body svg { width: 100%; max-width: 220px; height: auto; display: block; }
+  .gauge-num { font-size: 32px; font-weight: 700; color: var(--ink); margin-top: -2px; }
+  .gauge-lbl { font-size: 10px; color: var(--light); text-transform: uppercase; letter-spacing: .08em; }
+  .gauge-sub { font-size: 11px; color: var(--mid); margin-top: 6px; }
+
+  /* ── INSIGHTS ── */
+  .insights-card {
+    background: #0D1B2A; border: 1px solid rgba(17,141,255,0.3); border-left: 3px solid var(--pbi-blue);
+    border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 16px;
+  }
+  .ins-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--pbi-blue); margin-bottom: 10px; }
+  .ins-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); column-gap: 16px; }
+  .ins-row { display: flex; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line2); }
+  .ins-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .ins-text { font-size: 11px; color: #A8C4E0; line-height: 1.55; }
+  .ins-text strong { color: #F3F2F1; }
+
+  /* ── COMPARE PAGE ── */
+  .cmp-mini-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px; margin-bottom: 12px; }
+  .cmp-mini { background: var(--white); border-radius: var(--r); box-shadow: var(--shadow); padding: 12px 14px; border-top: 3px solid var(--cc); }
+  .cmp-mini-name { font-size: 11px; font-weight: 700; color: var(--cc); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .cmp-row { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--line2); }
+  .cmp-row:last-child { border-bottom: none; }
+  .cmp-lbl { color: var(--mid); }
+  .cmp-val { font-weight: 700; color: #F3F2F1; }
+  .cmp-val.na { color: var(--light); font-weight: 400; }
+  .cmp-val.green { color: var(--green-tx); }
+  .cmp-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .cmp-charts svg { width: 100%; height: auto; display: block; }
+  .eng-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .eng-lbl { font-size: 10px; color: var(--mid); font-weight: 600; min-width: 80px; }
+  .eng-track { flex: 1; height: 22px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+  .eng-fill { height: 100%; border-radius: 2px; display: flex; align-items: center; justify-content: flex-end; padding-right: 5px; font-size: 10px; font-weight: 700; color: white; }
+
+  /* ── BANNER / FOOTER / TOAST ── */
+  .banner {
+    margin: 12px 16px 0; display: flex; gap: 10px; background: #2A1214; border: 1px solid rgba(232,17,35,.35);
+    color: #F1948A; font-size: 12px; padding: 10px 12px; border-radius: var(--r); line-height: 1.5;
+  }
+  .banner strong { color: #F3F2F1; }
+  .banner ul { margin: 4px 0 0 18px; }
+  .foot { padding: 0 16px 24px; font-size: 10px; color: var(--light); line-height: 1.7; }
+  .foot .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--mid); margin-right: 5px; vertical-align: middle; }
+  .foot .dot.live { background: var(--green-tx); }
+  .foot #srcText { color: var(--mid); font-weight: 600; }
+  .foot code { font-family: inherit; color: var(--mid); }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: #F3F2F1; color: #111; font-size: 12px; padding: 8px 14px; border-radius: var(--r);
+    opacity: 0; transition: opacity .18s ease; pointer-events: none; z-index: 300;
+  }
+  .toast[data-open="1"] { opacity: .96; }
+
+  @media (max-width: 900px) {
+    .kpi-strip, .net-kpi { grid-template-columns: repeat(2,1fr); }
+    .chart-grid, .cmp-charts { grid-template-columns: 1fr; }
+    .pbi-filter-bar { display: none; }
+  }
+  @media (max-width: 700px) {
+    /* The top bar wraps to two rows here, so only the tab strip stays pinned. */
+    .pbi-bar { position: static; }
+    .pbi-pages { top: 0; }
+    .pbi-right { flex-wrap: wrap; }
+    .pbi-lbl { display: none; }
+  }
+  @media (max-width: 480px) {
+    .pbi-report-name, .pbi-sep { display: none; }
+    .kpi-value { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PBI TOP BAR -->
+<header class="pbi-bar">
+  <div class="pbi-left">
+    <div class="pbi-logo">
+      <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <rect x="0" y="10" width="4" height="8" rx="1" fill="#F2C94C"/>
+        <rect x="7" y="6"  width="4" height="12" rx="1" fill="#F2C94C" opacity=".85"/>
+        <rect x="14" y="2" width="4" height="16" rx="1" fill="#F2C94C" opacity=".7"/>
+      </svg>
+      <span class="pbi-logo-text">SOMOS</span>
+    </div>
+    <div class="pbi-sep"></div>
+    <span class="pbi-report-name">Chapter Performance</span>
+  </div>
+  <div class="pbi-right">
+    <select class="pbi-select" id="quarterSel" aria-label="Period"></select>
+    <label class="pbi-lbl" for="vsSel">Compare with</label>
+    <select class="pbi-select" id="vsSel"></select>
+    <button class="pbi-btn" id="copyLink" type="button">Copy link</button>
+  </div>
+</header>
+
+<!-- PAGE TABS -->
+<nav class="pbi-pages" id="tabs" aria-label="Report pages"></nav>
+
+<div id="banner" hidden></div>
+
+<!-- CANVAS -->
+<main class="canvas" id="canvas"><p class="loading">Loading data&hellip;</p></main>
+
+<footer class="foot">
+  <p><span class="dot" id="srcDot"></span><span id="srcText">Loading data&hellip;</span> · <span id="srcMeta"></span></p>
+  <p>Code ownership: Data Analytics Team · <code id="ownerEmail">laura.lugo@somoslatinxintech.com</code></p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =====================================================================
+   SERVER BRIDGE
+   ---------------------------------------------------------------------
+   This page runs inside Apps Script's HtmlService sandbox. Data comes from
+   getDashboardData() in DashboardFeed.gs (which reads KPIs_Historico as the
+   deploying account), and the shareable state lives in the /exec URL's
+   query string via google.script.url / google.script.history - the page's
+   own `location` is a sandboxed iframe, not the address bar.
+   ===================================================================== */
+function callServer(fn) {
+  return new Promise((resolve, reject) => {
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn]();
+  });
+}
+
+function readLocation() {
+  return new Promise(resolve => {
+    google.script.url.getLocation(loc => resolve((loc && loc.parameter) || {}));
+  });
+}
+
+/* =====================================================================
+   METRIC REGISTRY - one row per sortable / rankable column.
+   fmt:  int | dec1 | pct
+   agg:  sum | wmean (weighted by `weight`) | ratio (num/den) | max
+   ===================================================================== */
+const METRICS = [
+  { key:"events",             label:"Events held",               short:"Events",       fmt:"int",  agg:"sum" },
+  { key:"attendance",         label:"Total attendance",          short:"Attendance",   fmt:"int",  agg:"sum" },
+  { key:"avg_attendance",     label:"Attendance / event",        short:"Avg / event",  fmt:"dec1", agg:"ratio", num:"attendance", den:"events", derived:true },
+  { key:"largest_event",      label:"Largest single event",      short:"Largest event",fmt:"int",  agg:"max" },
+  { key:"new_li_followers",   label:"New LinkedIn followers",    short:"New LI",       fmt:"int",  agg:"sum" },
+  { key:"total_li_followers", label:"Total LinkedIn followers",  short:"Total LI",     fmt:"int",  agg:"sum" },
+  { key:"li_impressions",     label:"LinkedIn impressions",      short:"Impressions",  fmt:"int",  agg:"sum" },
+  { key:"li_engagement_rate", label:"LinkedIn engagement rate",  short:"LI engmt.",    fmt:"pct",  agg:"wmean", weight:"total_li_followers" },
+  { key:"li_posts",           label:"LinkedIn posts published",  short:"LI posts",     fmt:"int",  agg:"sum" }
+];
+const METRIC_BY_KEY = Object.fromEntries(METRICS.map(m => [m.key, m]));
+
+/* ===================== helpers ===================== */
+const $ = id => document.getElementById(id);
+const slug = s => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+// Blanks, "", "-", "N/A" and non-numbers all become null - never 0.
+function num(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const s = String(v).trim();
+  if (s === "" || s === "-" || s === "—" || /^(n\/?a|null|none|tbd)$/i.test(s)) return null;
+  const n = Number(s.replace(/[, ]/g, "").replace(/%$/, ""));
+  if (!Number.isFinite(n)) return null;
+  return /%$/.test(s) ? n / 100 : n;
+}
+
+// Accepts "2026_Q2", "Q2_2026", "Q2 2026", "2026-Q2" -> "2026_Q2"
+function normQuarter(v) {
+  const s = String(v == null ? "" : v).trim();
+  let m = s.match(/^(\d{4})[_\-\s]?Q([1-4])$/i);
+  if (m) return m[1] + "_Q" + m[2];
+  m = s.match(/^Q([1-4])[_\-\s]?(\d{4})$/i);
+  if (m) return m[2] + "_Q" + m[1];
+  return s;
+}
+const quarterLabel = q => { const m = String(q).match(/^(\d{4})_Q([1-4])$/); return m ? "Q" + m[2] + " " + m[1] : String(q); };
+const quarterRank  = q => { const m = String(q).match(/^(\d{4})_Q([1-4])$/); return m ? Number(m[1]) * 4 + Number(m[2]) : -1; };
+function previousQuarter(q) {
+  const m = String(q).match(/^(\d{4})_Q([1-4])$/);
+  if (!m) return null;
+  const y = Number(m[1]), n = Number(m[2]);
+  return n === 1 ? (y - 1) + "_Q4" : y + "_Q" + (n - 1);
+}
+
+function fmt(value, kind) {
+  if (value === null || value === undefined) return null;
+  if (kind === "pct")  return (value * 100).toFixed(1) + "%";
+  if (kind === "dec1") return value.toFixed(1);
+  return Math.round(value).toLocaleString("en-US");
+}
+/* ===================== data loading ===================== */
+function normalizeRows(raw) {
+  const out = [];
+  for (const r of raw || []) {
+    if (!r) continue;
+    const chapter = String(r.chapter != null ? r.chapter : (r.Chapter != null ? r.Chapter : "")).trim();
+    const quarter = normQuarter(r.quarter != null ? r.quarter : (r.Period != null ? r.Period : (r.period != null ? r.period : "")));
+    if (!chapter || !/^\d{4}_Q[1-4]$/.test(quarter)) continue;
+    const row = { chapter, chapterSlug: slug(chapter), quarter };
+    for (const m of METRICS) {
+      if (m.derived) continue;
+      row[m.key] = num(r[m.key]);
+    }
+    row.largest_event_name = r.largest_event_name != null && String(r.largest_event_name).trim() !== ""
+      && !/^(n\/?a|null|none)$/i.test(String(r.largest_event_name).trim())
+      ? String(r.largest_event_name).trim()
+      : null;
+    // Derived: attendance per event. Null unless both parts are present and events > 0.
+    row.avg_attendance = (row.attendance !== null && row.events) ? row.attendance / row.events : null;
+    out.push(row);
+  }
+  return out;
+}
+
+async function loadData() {
+  const payload = await callServer("getDashboardData");
+  if (payload && payload.error) throw new Error(payload.error);
+  const rows = normalizeRows(payload && payload.rows);
+  if (!rows.length) throw new Error("KPIs_Historico has no usable rows yet - run runCleaningAndConsolidation() first.");
+  return {
+    rows,
+    source: "Live · " + (payload.source || "KPIs_Historico"),
+    kind: "live",
+    generated_at: payload.generated_at || null,
+    app_url: payload.app_url || ""
+  };
+}
+
+function showLoadError(err) {
+  const msg = err && err.message ? err.message : String(err);
+  const banner = $("banner");
+  banner.hidden = false;
+  banner.className = "banner";
+  banner.textContent = "";
+  const strong = document.createElement("strong");
+  strong.textContent = "Could not load KPIs_Historico: ";
+  banner.append(strong, document.createTextNode(msg));
+  $("canvas").innerHTML = '<p class="loading">No data to show.</p>';
+  $("srcDot").className = "dot";
+  $("srcText").textContent = "Not loaded";
+  $("srcMeta").textContent = "";
+}
+
+
+/* ===================== data rules / warning banner ===================== */
+function checkDataRules(rows) {
+  const offenders = rows.filter(r => r.li_engagement_rate !== null && r.li_engagement_rate > 1);
+  const banner = $("banner");
+  if (!offenders.length) { banner.hidden = true; banner.textContent = ""; return; }
+
+  banner.hidden = false;
+  banner.textContent = "";
+  banner.className = "banner";
+  const glyph = document.createElement("span");
+  glyph.className = "glyph"; glyph.setAttribute("aria-hidden", "true"); glyph.textContent = "⚠";
+  const body = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = "Warning: " + offenders.length + " LinkedIn engagement rate value" + (offenders.length > 1 ? "s" : "") + " above 1";
+  const p = document.createElement("div");
+  p.textContent = "li_engagement_rate must be a decimal (0.0185 = 1.85%). LinkedIn sometimes exports this as a percentage — fix it at the source (Consolidation.gs / KPIs_Historico):";
+  const ul = document.createElement("ul");
+  for (const o of offenders.slice(0, 12)) {
+    const li = document.createElement("li");
+    li.textContent = o.chapter + " · " + quarterLabel(o.quarter) + " · " + o.li_engagement_rate;
+    ul.appendChild(li);
+  }
+  if (offenders.length > 12) {
+    const li = document.createElement("li");
+    li.textContent = "…and " + (offenders.length - 12) + " more";
+    ul.appendChild(li);
+  }
+  body.append(strong, p, ul);
+  banner.append(glyph, body);
+}
+
+/* ===================== aggregation ===================== */
+function aggregate(rows, metric) {
+  const m = typeof metric === "string" ? METRIC_BY_KEY[metric] : metric;
+  if (!m || !rows.length) return null;
+  if (m.agg === "ratio") {
+    let numSum = 0, denSum = 0, seen = false;
+    for (const r of rows) {
+      if (r[m.num] === null || r[m.den] === null) continue;
+      numSum += r[m.num]; denSum += r[m.den]; seen = true;
+    }
+    return seen && denSum > 0 ? numSum / denSum : null;
+  }
+  if (m.agg === "max") {
+    let best = null;
+    for (const r of rows) { const v = r[m.key]; if (v === null) continue; if (best === null || v > best) best = v; }
+    return best;
+  }
+  if (m.agg === "wmean") {
+    let wSum = 0, vSum = 0, plainCount = 0, plainSum = 0;
+    for (const r of rows) {
+      const v = r[m.key];
+      if (v === null) continue;
+      plainSum += v; plainCount++;
+      const w = r[m.weight];
+      if (w !== null && w > 0) { wSum += w; vSum += v * w; }
+    }
+    if (wSum > 0) return vSum / wSum;
+    return plainCount ? plainSum / plainCount : null;   // no weights available
+  }
+  let sum = 0, seen = false;
+  for (const r of rows) { const v = r[m.key]; if (v === null) continue; sum += v; seen = true; }
+  return seen ? sum : null;
+}
+
+/* ===================== chapters: colours, names, order =====================
+   Same palette, display names and tab order as SOMOS_Dashboard_Generator.html. */
+const CHAPTER_COLORS = {
+  montreal: "#118DFF", toronto: "#12239E", vancouver: "#E66C37",
+  ottawa: "#6B007B", calgary: "#E044A7", canada: "#744EC2"
+};
+const CHAPTER_DISPLAY_NAME = { montreal: "Montréal", canada: "Canada (National)" };
+const KNOWN_ORDER = ["montreal", "toronto", "vancouver", "ottawa", "calgary"];
+const FALLBACK_COLORS = ["#00B7C3", "#B4A0FF", "#00CC6A", "#FF8C00", "#C239B3"];
+
+function chapterSort(a, b) {
+  if (a.slug === "canada") return 1;
+  if (b.slug === "canada") return -1;
+  const ia = KNOWN_ORDER.indexOf(a.slug), ib = KNOWN_ORDER.indexOf(b.slug);
+  if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
+}
+
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const intFmt = v => v === null || v === undefined ? "N/A" : Math.round(v).toLocaleString("en-US");
+const pctFmt = v => v === null || v === undefined ? "N/A" : (v * 100).toFixed(1) + "%";
+const dec1 = v => v === null || v === undefined ? "N/A" : (Math.round(v * 10) / 10).toString();
+
+function periodLabel(q) {
+  const m = String(q).match(/^(\d{4})_Q([1-4])$/);
+  if (!m) return String(q);
+  const ranges = { 1: "Jan – Mar", 2: "Apr – Jun", 3: "Jul – Sep", 4: "Oct – Dec" };
+  return "Q" + m[2] + " " + m[1] + " · " + ranges[m[2]];
+}
+
+/* ===================== state <-> URL ===================== */
+const CMP = "cmp";
+// quarter: the quarter on screen. vs: the quarter it is compared against, or
+// null - a quarter is shown on its own until the reader picks one to compare.
+const state = { quarter: null, vs: null, view: null };
+let DATA = { rows: [], quarters: [], chapters: [] };
+let APP_URL = "";   // the /exec URL, from getDashboardData(), for "Copy link"
+
+// `params` is google.script.url.getLocation()'s `parameter` object.
+function readURL(params) {
+  const q = params.q;
+  if (q) state.quarter = normQuarter(q);
+  const vs = params.vs;
+  if (vs) state.vs = normQuarter(vs);
+  const v = params.view;
+  if (v) state.view = slug(v);
+}
+
+function urlParams() {
+  const p = {};
+  if (state.quarter) p.q = state.quarter;
+  if (state.vs) p.vs = state.vs;
+  if (state.view) p.view = state.view;
+  return p;
+}
+
+function writeURL() {
+  google.script.history.replace(null, urlParams(), "");
+}
+
+const shareURL = () => APP_URL + "?" + new URLSearchParams(urlParams()).toString();
+
+/* ===================== data access ===================== */
+const rowsFor = q => DATA.rows.filter(r => r.quarter === q);
+const rowOf = (chapterSlug, q) => DATA.rows.find(r => r.quarter === q && r.chapterSlug === chapterSlug) || null;
+const chaptersIn = q => DATA.chapters.filter(c => rowOf(c.slug, q));
+// The quarter picked for comparison, only if it exists and differs from the one shown.
+function compareQuarter() {
+  return state.vs && state.vs !== state.quarter && DATA.quarters.includes(state.vs) ? state.vs : null;
+}
+const periodTitle = () => periodLabel(state.quarter) + (compareQuarter() ? " vs " + quarterLabel(compareQuarter()) : "");
+
+/* ===================== small render helpers ===================== */
+// Change vs the comparison quarter. Rates compare in percentage points, counts in %.
+function deltaHTML(now, before, kind, vsQ) {
+  if (!vsQ) return "";
+  const vs = " vs " + quarterLabel(vsQ);
+  if (now === null || now === undefined || before === null || before === undefined) {
+    return '<div class="kpi-delta">Change' + vs + ": N/A</div>";
+  }
+  let diff, text;
+  if (kind === "pct") {
+    diff = (now - before) * 100;
+    text = Math.abs(diff).toFixed(1) + " pts";
+  } else {
+    if (before === 0) return '<div class="kpi-delta">Change' + vs + ": N/A</div>";
+    diff = (now - before) / Math.abs(before) * 100;
+    text = Math.abs(diff).toFixed(1) + "%";
+  }
+  const flat = Math.abs(diff) < 0.05;
+  const cls = flat ? "flat" : diff > 0 ? "up" : "down";
+  const arrow = flat ? "→" : diff > 0 ? "▲" : "▼";
+  const sign = flat ? "" : diff > 0 ? "+" : "−";
+  return '<div class="kpi-delta ' + cls + '">' + arrow + " " + sign + text + vs + "</div>";
+}
+
+function kpiCard(o) {
+  return '<div class="kpi-card" style="--cc:' + o.color + '">' +
+    '<div class="kpi-label">' + o.label + "</div>" +
+    '<div class="' + o.cls + '"' + (o.style ? ' style="' + o.style + '"' : "") + ">" + o.value + "</div>" +
+    '<div class="kpi-note">' + (o.note || "") + "</div>" + (o.delta || "") + "</div>";
+}
+
+function titleRow(title, accent, sub) {
+  return '<div class="title-row"><div>' +
+    '<div class="page-title">' + esc(title) + " <span>" + accent + "</span></div>" +
+    '<div class="page-subtitle">' + sub + "</div></div>" +
+    '<div class="period-chip">' + periodTitle() + "</div></div>";
+}
+
+function insightsVis(items) {
+  return '<div class="insights-card"><div class="ins-head">⚡ Insights</div><div class="ins-grid">' +
+    items.map(i => '<div class="ins-row"><div class="ins-icon" aria-hidden="true">' + i.i +
+      '</div><div class="ins-text">' + i.t + "</div></div>").join("") + "</div></div>";
+}
+
+/* ===================== rule-based insights (no hand-written text) ===================== */
+function attendanceLeader(rows) {
+  return rows.filter(r => r.attendance !== null).reduce((a, b) => (!a || b.attendance > a.attendance ? b : a), null);
+}
+function engagementExtremes(rows) {
+  const withEng = rows.filter(r => r.li_engagement_rate !== null);
+  if (!withEng.length) return { top: null, low: null };
+  return {
+    top: withEng.reduce((a, b) => (b.li_engagement_rate > a.li_engagement_rate ? b : a)),
+    low: withEng.reduce((a, b) => (b.li_engagement_rate < a.li_engagement_rate ? b : a))
+  };
+}
+
+function chapterBadge(row, rows) {
+  const lead = attendanceLeader(rows);
+  const { top, low } = engagementExtremes(rows);
+  if (lead && lead.chapterSlug === row.chapterSlug) return "Attendance Leader";
+  if (top && top.chapterSlug === row.chapterSlug) return "Engagement Leader";
+  if (low && low.chapterSlug === row.chapterSlug && rows.length > 1) return "Improvement Opportunity";
+  return "Active Chapter";
+}
+
+function chapterInsights(k, rows, prev, vsQ) {
+  const items = [];
+  if (k.largest_event_name && k.largest_event !== null) {
+    items.push({ i: "🏆", t: "<strong>Highest-attendance event:</strong> " + esc(k.largest_event_name) + " — " + intFmt(k.largest_event) + " attendees." });
+  } else if (!k.events) {
+    items.push({ i: "📭", t: "No events recorded in this period." });
+  }
+  if (k.li_posts) {
+    items.push({ i: "📣", t: "With <strong>" + intFmt(k.li_posts) + " posts published</strong> this period, average engagement was " + pctFmt(k.li_engagement_rate) + "." });
+  } else {
+    items.push({ i: "📡", t: "<strong>No LinkedIn posts tracked</strong> this period — the +" + intFmt(k.new_li_followers || 0) + " new followers came organically." });
+  }
+  const netAvg = aggregate(rows, "avg_attendance");
+  if (netAvg !== null && k.avg_attendance !== null) {
+    const cmp = k.avg_attendance >= netAvg ? "above" : "below";
+    items.push({ i: "💡", t: "The average of <strong>" + dec1(k.avg_attendance) + " attendees/event</strong> is " + cmp + " the network average (" + dec1(netAvg) + ")." });
+  }
+  if (prev && prev.attendance && k.attendance !== null) {
+    const ch = (k.attendance - prev.attendance) / prev.attendance * 100;
+    items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
+      quarterLabel(vsQ) + " (" + intFmt(prev.attendance) + " → " + intFmt(k.attendance) + ")." });
+  }
+  return items;
+}
+
+function networkInsights(rows, vsRows, vsQ) {
+  const items = [];
+  const name = r => esc(chapterBySlug(r.chapterSlug).label);
+  const lead = attendanceLeader(rows);
+  if (lead) {
+    items.push({ i: "🏆", t: "<strong>" + name(lead) + " leads in attendees</strong> (" + intFmt(lead.attendance) + ", avg " + dec1(lead.avg_attendance) + "/event) with " + intFmt(lead.events) + " event(s)." });
+  }
+  const { top, low } = engagementExtremes(rows);
+  if (top) {
+    items.push({ i: "📈", t: "<strong>" + name(top) + " leads in engagement</strong> — " + pctFmt(top.li_engagement_rate) + ", " + intFmt(top.li_posts || 0) + " posts, " + intFmt(top.li_impressions || 0) + " impressions." });
+    if (low && low.chapterSlug !== top.chapterSlug) {
+      items.push({ i: "⚠️", t: "<strong>" + name(low) + " has the lowest engagement</strong> (" + pctFmt(low.li_engagement_rate) + ") — worth reviewing content vs. audience fit." });
+    }
+  }
+  const withLargest = rows.filter(r => r.largest_event !== null);
+  if (withLargest.length) {
+    const big = withLargest.reduce((a, b) => (b.largest_event > a.largest_event ? b : a));
+    items.push({ i: "🌎", t: "<strong>" + name(big) + "</strong> holds the largest single event (" + intFmt(big.largest_event) + " attendees, \"" + esc(big.largest_event_name || "") + "\")." });
+  }
+  if (vsRows) {
+    const now = aggregate(rows, "attendance"), before = aggregate(vsRows, "attendance");
+    if (now !== null && before) {
+      const ch = (now - before) / before * 100;
+      items.push({ i: ch >= 0 ? "📈" : "📉", t: "<strong>Network attendance " + (ch >= 0 ? "up " : "down ") + Math.abs(ch).toFixed(1) + "%</strong> vs " +
+        quarterLabel(vsQ) + " (" + intFmt(before) + " → " + intFmt(now) + ")." });
+    }
+  }
+  return items;
+}
+
+/* ===================== chapter page ===================== */
+function chapterBySlug(s) { return DATA.chapters.find(c => c.slug === s); }
+
+function chapterKpis(k, p, vsQ, c) {
+  return '<div class="kpi-strip">' +
+    kpiCard({ color: c, label: "Events Held", cls: "kpi-value accent", value: intFmt(k.events), note: "this period",
+      delta: deltaHTML(k.events, p && p.events, "int", vsQ) }) +
+    kpiCard({ color: c, label: "Total Attendees", cls: "kpi-value", value: intFmt(k.attendance),
+      note: k.avg_attendance !== null ? "~" + dec1(k.avg_attendance) + " per event" : "",
+      delta: deltaHTML(k.attendance, p && p.attendance, "int", vsQ) }) +
+    kpiCard({ color: c, label: "New LinkedIn Followers", cls: "kpi-value green", value: k.new_li_followers === null ? "N/A" : "+" + intFmt(k.new_li_followers),
+      note: "current total: " + intFmt(k.total_li_followers),
+      delta: deltaHTML(k.new_li_followers, p && p.new_li_followers, "int", vsQ) }) +
+    kpiCard({ color: c, label: "LinkedIn Impressions", cls: k.li_impressions === null ? "kpi-value gray" : "kpi-value", value: intFmt(k.li_impressions),
+      note: !k.li_posts ? "no posts tracked" : intFmt(k.li_posts) + " posts published",
+      delta: deltaHTML(k.li_impressions, p && p.li_impressions, "int", vsQ) }) +
+    kpiCard({ color: c, label: "Avg. Engagement Rate LI", cls: k.li_engagement_rate === null ? "kpi-value gray" : "kpi-value",
+      style: k.li_engagement_rate !== null ? "color:" + c : "", value: pctFmt(k.li_engagement_rate), note: "LinkedIn",
+      delta: deltaHTML(k.li_engagement_rate, p && p.li_engagement_rate, "pct", vsQ) }) +
+    "</div>";
+}
+
+// ① The generator's event timeline needs unique_events (attendee-level, never
+// published). From aggregated KPIs we can still show the largest event and
+// everything else combined.
+function highlightsVis(k, c) {
+  let body;
+  if (!k.events) {
+    body = '<div class="vis-empty">No events in this period</div>';
+  } else {
+    const rows = [];
+    if (k.largest_event !== null) {
+      rows.push({ when: "Top", name: k.largest_event_name || "Largest event", tag: "Largest event", att: k.largest_event });
+    }
+    if (k.events > 1 && k.attendance !== null && k.largest_event !== null) {
+      const others = k.events - 1;
+      rows.push({ when: "+" + others, name: others + " other event" + (others > 1 ? "s" : ""), tag: "Combined", att: k.attendance - k.largest_event });
+    }
+    body = '<div class="tl">' + rows.map(e =>
+      '<div class="tl-row"><div class="tl-date">' + esc(e.when) + '</div>' +
+      '<div class="tl-dot" style="background:' + c + '"></div>' +
+      '<div class="tl-info"><div class="tl-name">' + esc(e.name) + '</div><span class="tl-tag">' + e.tag + "</span></div>" +
+      '<div><div class="tl-att" style="color:' + c + '">' + intFmt(e.att) + '</div><div class="tl-att-lbl">att.</div></div></div>'
+    ).join("") + "</div>" +
+    '<div class="tl-footer"><span class="tl-footer-lbl">Total attendees · ' + intFmt(k.events) + " event(s)</span>" +
+    '<span class="tl-footer-val">' + intFmt(k.attendance) + "</span></div>";
+  }
+  return '<div class="vis"><div class="vis-title">① Events This Period <span class="vis-title-tag">Highlights</span></div>' + body + "</div>";
+}
+
+// ② Single quarter: this chapter's share of the network. Comparing quarters:
+// the two picked quarters side by side.
+const TREND_METRICS = [
+  ["attendance", "Attendees"], ["events", "Events held"],
+  ["new_li_followers", "New LinkedIn followers"], ["li_posts", "LinkedIn posts"]
+];
+function shareVis(ch, c, rows) {
+  const k = rowOf(ch.slug, state.quarter);
+  const metrics = TREND_METRICS.concat([["li_impressions", "LinkedIn impressions"]]);
+  const body = metrics.map(([key, label]) => {
+    const total = aggregate(rows, key);
+    const share = k[key] === null || !total ? null : k[key] / total;
+    return '<div class="hb-row"><span class="hb-lbl">' + label + '</span><div class="hb-track">' +
+      (share === null ? "" : '<div class="hb-fill" style="width:' + Math.max(share * 100, 2).toFixed(1) + "%;background:" + c + '"></div>') +
+      '</div><span class="hb-val">' + (share === null ? "N/A" : (share * 100).toFixed(1) + "%") + "</span></div>";
+  }).join("");
+  return '<div class="vis"><div class="vis-title">② Share of Network <span class="vis-title-tag">% of all chapters</span></div>' +
+    '<div class="hbar">' + body + "</div>" +
+    '<div class="legend-row">Pick a quarter in "Compare with" to see quarter-over-quarter change.</div></div>';
+}
+
+function trendVis(ch, c, vsQ) {
+  const qs = [vsQ, state.quarter].sort((a, b) => quarterRank(a) - quarterRank(b));
+  const head = '<div class="vis"><div class="vis-title">② Quarter Comparison <span class="vis-title-tag">Clustered bar</span></div>';
+  const shade = q => (q === state.quarter ? c : c + "66");
+  const groups = TREND_METRICS.map(([key, label]) => {
+    const vals = qs.map(q => { const r = rowOf(ch.slug, q); return r ? r[key] : null; });
+    const max = Math.max(1, ...vals.filter(v => v !== null));
+    return '<div><div class="qt-group-lbl">' + label + "</div>" + qs.map((q, i) =>
+      '<div class="qt-row"><span class="qt-q">Q' + q.slice(-1) + '</span><div class="qt-track">' +
+      (vals[i] === null ? "" : '<div class="qt-fill" style="width:' + (vals[i] / max * 100).toFixed(1) + "%;background:" + shade(q) + '"></div>') +
+      '</div><span class="qt-val">' + intFmt(vals[i]) + "</span></div>").join("") + "</div>";
+  }).join("");
+  const legend = '<div class="legend-row">' + qs.map(q =>
+    '<span><i style="background:' + shade(q) + '"></i>' + quarterLabel(q) + "</span>").join("") + "</div>";
+  return head + '<div class="qt">' + groups + "</div>" + legend + "</div>";
+}
+
+// ③ LinkedIn metrics, each bar scaled against the network maximum this quarter.
+function linkedinVis(k, c, rows) {
+  const head = '<div class="vis"><div class="vis-title">③ LinkedIn — Period Metrics <span class="vis-title-tag">Bar chart</span></div>';
+  if (!k.li_posts) {
+    return head + '<div class="vis-empty"><div style="font-size:28px;color:#E1DFDD;margin-bottom:6px">—</div>No LinkedIn posts tracked<br>this period' +
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--light)">New followers (organic)</div>' +
+      '<div style="font-size:26px;font-weight:700;color:var(--green);margin-top:2px">+' + intFmt(k.new_li_followers || 0) + "</div></div></div></div>";
+  }
+  const max = key => Math.max(...rows.map(r => r[key] || 0), key === "li_engagement_rate" ? 0.1 : 1);
+  const pct = (v, key) => Math.max((v || 0) / max(key) * 100, 4).toFixed(1);
+  const row = (label, key, shown, fill) =>
+    '<div class="hb-row"><span class="hb-lbl">' + label + '</span><div class="hb-track"><div class="hb-fill" style="width:' + pct(k[key], key) + "%;background:" + fill + '">' +
+    '<span class="hb-text">' + shown + '</span></div></div><span class="hb-val">' + shown + "</span></div>";
+  return head + '<div class="hbar">' +
+    row("Posts Published", "li_posts", intFmt(k.li_posts), c) +
+    row("Impressions", "li_impressions", intFmt(k.li_impressions || 0), c + "bb") +
+    row("Engagement Rate", "li_engagement_rate", pctFmt(k.li_engagement_rate), c + "88") +
+    row("New Followers", "new_li_followers", "+" + intFmt(k.new_li_followers || 0), "#107C10aa") +
+    "</div></div>";
+}
+
+// ④ Half-donut gauge, drawn as two SVG annulus paths (no chart library).
+function gaugeSVG(value, max, color) {
+  const cx = 90, cy = 92, R = 72, r = 58;
+  const p = Math.max(0, Math.min(value / max, 1));
+  const pt = (rad, f) => { const a = Math.PI * (1 - f); return (cx + rad * Math.cos(a)).toFixed(2) + " " + (cy - rad * Math.sin(a)).toFixed(2); };
+  const band = f => "M " + pt(R, 0) + " A " + R + " " + R + " 0 0 1 " + pt(R, f) + " L " + pt(r, f) + " A " + r + " " + r + " 0 0 0 " + pt(r, 0) + " Z";
+  const tick = (f, label) => {
+    const a = Math.PI * (1 - f), x = cx + (R + 10) * Math.cos(a), y = cy - (R + 10) * Math.sin(a);
+    return '<text x="' + x.toFixed(1) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="middle" font-size="8" fill="#A19F9D">' + label + "</text>";
+  };
+  return '<svg viewBox="0 0 180 100" role="img" aria-label="Engagement rate gauge">' +
+    '<path d="' + band(1) + '" fill="rgba(255,255,255,0.08)"/>' +
+    (p > 0 ? '<path d="' + band(p) + '" fill="' + color + '"/>' : "") +
+    tick(0, "0") + tick(0.5, (max / 2) + "%") + tick(1, max + "%") + "</svg>";
+}
+
+function gaugeVis(k, c, rows) {
+  const head = '<div class="vis"><div class="vis-title">④ Engagement Rate LI <span class="vis-title-tag">Gauge</span></div>';
+  if (k.li_engagement_rate === null) {
+    return head + '<div class="vis-empty"><div style="font-size:40px;color:#E1DFDD;line-height:1">—</div>No engagement tracked<br>this period</div></div>';
+  }
+  const top = Math.max(...rows.map(r => r.li_engagement_rate || 0)) * 100;
+  const max = Math.max(25, Math.ceil(top * 1.2 / 5) * 5);
+  const net = aggregate(rows, "li_engagement_rate");
+  return head + '<div class="gauge-body">' + gaugeSVG(k.li_engagement_rate * 100, max, c) +
+    '<div class="gauge-num">' + pctFmt(k.li_engagement_rate) + '</div><div class="gauge-lbl">Avg. Engagement Rate LI</div>' +
+    (net !== null ? '<div class="gauge-sub">Network: ' + pctFmt(net) + " (weighted by followers)</div>" : "") +
+    "</div></div>";
+}
+
+function chapterView(ch) {
+  const q = state.quarter, rows = rowsFor(q), k = rowOf(ch.slug, q);
+  const vsQ = compareQuarter(), p = vsQ ? rowOf(ch.slug, vsQ) : null;
+  const c = ch.color;
+  const sub = intFmt(k.events || 0) + " event(s) · " + intFmt(k.attendance || 0) + " attendees · " +
+    (k.li_engagement_rate !== null ? "engagement " + pctFmt(k.li_engagement_rate) : "no engagement tracked") +
+    " · " + chapterBadge(k, rows);
+  return titleRow(ch.label, "Chapter", sub) +
+    chapterKpis(k, p, vsQ, c) +
+    '<div class="chart-grid">' + highlightsVis(k, c) + (vsQ ? trendVis(ch, c, vsQ) : shareVis(ch, c, rows)) + linkedinVis(k, c, rows) + gaugeVis(k, c, rows) + "</div>" +
+    insightsVis(chapterInsights(k, rows, p, vsQ));
+}
+
+/* ===================== comparison page ===================== */
+function clusteredBarSVG(chs, q) {
+  const W = 460, H = 190, m = { t: 16, r: 10, b: 28, l: 26 };
+  const att = chs.map(c => rowOf(c.slug, q).attendance || 0);
+  const fol = chs.map(c => rowOf(c.slug, q).new_li_followers || 0);
+  const maxY = Math.max(...att, ...fol, 10) * 1.1;
+  const y = v => H - m.b - (v / maxY) * (H - m.b - m.t);
+  const band = (W - m.l - m.r) / chs.length, inner = band * 0.72, bw = inner / 2 - 2;
+  const step = Math.max(10, Math.ceil(maxY / 4 / 10) * 10);
+  let out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Attendees and new LinkedIn followers by chapter">';
+  for (let v = 0; v <= maxY; v += step) {
+    out += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" stroke="rgba(255,255,255,0.07)"/>' +
+      '<text x="' + (m.l - 4) + '" y="' + (y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#605E5C">' + v + "</text>";
+  }
+  chs.forEach((c, i) => {
+    const x0 = m.l + i * band + (band - inner) / 2;
+    [[att[i], c.color, 0], [fol[i], "#A19F9D", 1]].forEach(([v, col, j]) => {
+      const x = x0 + j * (bw + 4);
+      out += '<rect x="' + x.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (H - m.b - y(v)).toFixed(1) + '" fill="' + col + '" rx="2"/>' +
+        '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y(v) - 3).toFixed(1) + '" text-anchor="middle" font-size="8" fill="#A19F9D">' + v + "</text>";
+    });
+    out += '<text x="' + (m.l + i * band + band / 2).toFixed(1) + '" y="' + (H - m.b + 12) + '" text-anchor="middle" font-size="9" font-weight="600" fill="' +
+      (c.slug === "toronto" || c.slug === "ottawa" ? "#C8C6C4" : c.color) + '">' + esc(c.label.slice(0, 3)) + "</text>";
+  });
+  return out + "</svg>";
+}
+
+function engagementBars(chs, q) {
+  const vals = chs.map(c => rowOf(c.slug, q).li_engagement_rate);
+  const max = Math.max(...vals.map(v => v || 0), 0.1) * 1.1;
+  return chs.map((c, i) => '<div class="eng-row"><span class="eng-lbl">' + esc(c.label) + '</span><div class="eng-track">' +
+    (vals[i] === null
+      ? '<div class="eng-fill" style="justify-content:center;color:#C8C6C4;width:100%">N/A</div>'
+      : '<div class="eng-fill" style="width:' + (vals[i] / max * 100).toFixed(1) + "%;background:" + c.color + '">' + pctFmt(vals[i]) + "</div>") +
+    "</div></div>").join("");
+}
+
+function compareView() {
+  const q = state.quarter, rows = rowsFor(q), chs = chaptersIn(q);
+  const vsQ = compareQuarter(), vsRows = vsQ ? rowsFor(vsQ) : null;
+  const net = key => aggregate(rows, key);
+  const before = key => (vsRows ? aggregate(vsRows, key) : null);
+  const blue = "#118DFF";
+  const cell = (v, plus) => v === null
+    ? '<span class="cmp-val na">N/A</span>'
+    : '<span class="cmp-val' + (plus && v > 0 ? " green" : "") + '">' + (plus ? "+" : "") + v + "</span>";
+
+  const minis = chs.map(c => {
+    const k = rowOf(c.slug, q);
+    const line = (label, v) => '<div class="cmp-row"><span class="cmp-lbl">' + label + "</span>" + v + "</div>";
+    return '<div class="cmp-mini" style="--cc:' + c.color + '"><div class="cmp-mini-name">' + esc(c.label) + "</div>" +
+      line("Events", cell(k.events === null ? null : intFmt(k.events))) +
+      line("Attendees", cell(k.attendance === null ? null : intFmt(k.attendance))) +
+      line("Avg/event", cell(k.avg_attendance === null ? null : dec1(k.avg_attendance))) +
+      line("+LI Followers", cell(k.new_li_followers === null ? null : intFmt(k.new_li_followers), true)) +
+      line("Total LI", cell(k.total_li_followers === null ? null : intFmt(k.total_li_followers))) +
+      line("LI Posts", cell(k.li_posts === null ? null : intFmt(k.li_posts))) +
+      line("Impressions", cell(k.li_impressions === null ? null : intFmt(k.li_impressions))) +
+      line("Engagement", cell(k.li_engagement_rate === null ? null : pctFmt(k.li_engagement_rate))) +
+      "</div>";
+  }).join("");
+
+  return titleRow("Chapter", "Comparison", "All chapters · same KPIs · " + periodLabel(q)) +
+    '<div class="net-kpi">' +
+      kpiCard({ color: blue, label: "Total Events (network)", cls: "kpi-value accent", value: intFmt(net("events")), note: "all chapters", delta: deltaHTML(net("events"), before("events"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Total Attendees", cls: "kpi-value", value: intFmt(net("attendance")), note: "network sum", delta: deltaHTML(net("attendance"), before("attendance"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "+LI Followers (network)", cls: "kpi-value green", value: "+" + intFmt(net("new_li_followers")), note: "sum across chapters", delta: deltaHTML(net("new_li_followers"), before("new_li_followers"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Posts Published (network)", cls: "kpi-value", value: intFmt(net("li_posts")), note: "sum across chapters", delta: deltaHTML(net("li_posts"), before("li_posts"), "int", vsQ) }) +
+      kpiCard({ color: blue, label: "Largest Event", cls: "kpi-value accent", value: intFmt(net("largest_event")), note: "attendees, single event", delta: deltaHTML(net("largest_event"), before("largest_event"), "int", vsQ) }) +
+    "</div>" +
+    '<div class="cmp-mini-row">' + minis + "</div>" +
+    '<div class="cmp-charts">' +
+      '<div class="vis"><div class="vis-title">Attendees vs. New LI Followers <span class="vis-title-tag">Clustered bar</span></div>' +
+        clusteredBarSVG(chs, q) +
+        '<div class="legend-row"><span><i style="background:#605E5C"></i>Attendees (chapter colour)</span><span><i style="background:#A19F9D"></i>+LI Followers</span></div></div>' +
+      '<div class="vis"><div class="vis-title">Engagement Rate LI <span class="vis-title-tag">Horizontal bar</span></div>' + engagementBars(chs, q) + "</div>" +
+    "</div>" +
+    insightsVis(networkInsights(rows, vsRows, vsQ));
+}
+
+/* ===================== page shell ===================== */
+function renderTabs() {
+  const tabs = $("tabs");
+  tabs.textContent = "";
+  const add = (view, html) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pbi-page-tab" + (state.view === view ? " active" : "");
+    b.dataset.view = view;
+    if (state.view === view) b.setAttribute("aria-current", "page");
+    b.innerHTML = html;
+    b.addEventListener("click", () => { state.view = view; writeURL(); render(); });
+    tabs.append(b);
+  };
+  for (const c of chaptersIn(state.quarter)) {
+    add(c.slug, '<span class="tab-dot" style="background:' + c.color + '"></span> ' + esc(c.label));
+  }
+  add(CMP, "⊞ Comparison");
+  const bar = document.createElement("div");
+  bar.className = "pbi-filter-bar";
+  bar.innerHTML = '<span>Period:</span><span class="filter-chip">' + periodTitle() + "</span>";
+  tabs.append(bar);
+}
+
+function render() {
+  const present = chaptersIn(state.quarter);
+  if (state.view !== CMP && !present.some(c => c.slug === state.view)) {
+    state.view = present.length ? present[0].slug : CMP;
+  }
+  renderTabs();
+  $("canvas").innerHTML = state.view === CMP ? compareView() : chapterView(chapterBySlug(state.view));
+}
+
+function fillCompareOptions() {
+  const vs = $("vsSel");
+  vs.textContent = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "No comparison";
+  vs.append(none);
+  for (const q of DATA.quarters) {
+    if (q === state.quarter) continue;
+    const o = document.createElement("option");
+    o.value = q; o.textContent = periodLabel(q);
+    vs.append(o);
+  }
+  vs.value = compareQuarter() || "";
+}
+
+function buildControls() {
+  const qs = $("quarterSel");
+  qs.textContent = "";
+  for (const q of DATA.quarters) {
+    const o = document.createElement("option");
+    o.value = q; o.textContent = periodLabel(q);
+    qs.append(o);
+  }
+  qs.value = state.quarter;
+  qs.addEventListener("change", () => {
+    state.quarter = qs.value;
+    if (state.vs === state.quarter) state.vs = null;
+    fillCompareOptions(); writeURL(); render();
+  });
+
+  fillCompareOptions();
+  $("vsSel").addEventListener("change", () => { state.vs = $("vsSel").value || null; writeURL(); render(); });
+}
+
+/* ===================== copy link ===================== */
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.dataset.open = "1";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.dataset.open = "0"; }, 2200);
+}
+
+$("copyLink").addEventListener("click", async () => {
+  const url = shareURL();
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link to this view copied — paste it in Slack");
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = url; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+    ta.remove();
+    toast(ok ? "Link to this view copied — paste it in Slack" : "Copy failed — use the address bar");
+  }
+});
+
+/* ===================== boot ===================== */
+function renderSourceChip(loaded) {
+  $("srcDot").className = "dot " + loaded.kind;
+  $("srcText").textContent = loaded.source;
+  const bits = [];
+  if (loaded.generated_at) {
+    const d = new Date(loaded.generated_at);
+    bits.push(Number.isNaN(d.getTime())
+      ? "updated " + loaded.generated_at
+      : "updated " + d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }));
+  }
+  bits.push(DATA.rows.length + " rows · " + DATA.quarters.length +
+    " quarter" + (DATA.quarters.length === 1 ? "" : "s") + " · " + DATA.chapters.length + " chapters");
+  $("srcMeta").textContent = bits.join(" · ");
+}
+
+(async function boot() {
+  let loaded;
+  try {
+    readURL(await readLocation());
+    loaded = await loadData();
+  } catch (err) {
+    showLoadError(err);
+    return;
+  }
+
+  APP_URL = loaded.app_url;
+  DATA.rows = loaded.rows;
+  DATA.quarters = Array.from(new Set(loaded.rows.map(r => r.quarter))).sort((a, b) => quarterRank(a) - quarterRank(b));
+  let extra = 0;
+  DATA.chapters = Array.from(new Map(loaded.rows.map(r => [r.chapterSlug, r.chapter])).entries())
+    .map(([s, name]) => ({
+      slug: s, name,
+      label: CHAPTER_DISPLAY_NAME[s] || name,
+      color: CHAPTER_COLORS[s] || FALLBACK_COLORS[extra++ % FALLBACK_COLORS.length]
+    }))
+    .sort(chapterSort);
+
+  if (!state.quarter || !DATA.quarters.includes(state.quarter)) {
+    state.quarter = DATA.quarters[DATA.quarters.length - 1];
+  }
+  state.vs = compareQuarter();
+
+  checkDataRules(DATA.rows);
+  renderSourceChip(loaded);
+  buildControls();
+  render();
+  writeURL();
+})();
+</script>
+</body>
+</html>

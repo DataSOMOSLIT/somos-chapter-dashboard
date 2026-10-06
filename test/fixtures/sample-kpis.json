@@ -1,0 +1,18 @@
+{
+  "_comment": "SYNTHETIC test data - invented numbers and event names, NOT real SOMOS KPIs. Real data lives only in KPIs_Historico (Master_Staging_Sheet) and is served by the Apps Script web app.",
+  "generated_at": "2026-10-04T12:00:00.000Z",
+  "rows": [
+    { "quarter": "2026_Q3", "chapter": "Montreal",  "events": 2, "attendance": 30,  "largest_event": 18, "largest_event_name": "Sample Mixer",           "new_li_followers": 20,  "total_li_followers": 500, "li_impressions": 3000,  "li_engagement_rate": 0.15, "li_posts": 6  },
+    { "quarter": "2026_Q3", "chapter": "Toronto",   "events": 1, "attendance": 40,  "largest_event": 40, "largest_event_name": "Sample Summer Social",   "new_li_followers": 50,  "total_li_followers": 900, "li_impressions": 5000,  "li_engagement_rate": 0.22, "li_posts": 8  },
+    { "quarter": "2026_Q3", "chapter": "Vancouver", "events": 1, "attendance": 12,  "largest_event": 12, "largest_event_name": "Sample Trivia Night",    "new_li_followers": 10,  "total_li_followers": 150, "li_impressions": 1500,  "li_engagement_rate": 0.14, "li_posts": 5  },
+    { "quarter": "2026_Q3", "chapter": "Ottawa",    "events": 1, "attendance": 8,   "largest_event": 8,  "largest_event_name": "Sample Coffee Chat",     "new_li_followers": 15,  "total_li_followers": 200, "li_impressions": 1800,  "li_engagement_rate": 0.13, "li_posts": 6  },
+    { "quarter": "2026_Q3", "chapter": "Calgary",   "events": 1, "attendance": 10,  "largest_event": 10, "largest_event_name": "Sample Meetup",          "new_li_followers": 8,   "total_li_followers": 100, "li_impressions": 1200,  "li_engagement_rate": 0.12, "li_posts": 4  },
+    { "quarter": "2026_Q3", "chapter": "Canada",    "events": 2, "attendance": 60,  "largest_event": 45, "largest_event_name": "Sample National Webinar","new_li_followers": 80,  "total_li_followers": 400, "li_impressions": 9000,  "li_engagement_rate": 0.08, "li_posts": 15 },
+    { "quarter": "2026_Q2", "chapter": "Montreal",  "events": 2, "attendance": 28,  "largest_event": 16, "largest_event_name": "Sample Panel",           "new_li_followers": 30,  "total_li_followers": 480, "li_impressions": 4000,  "li_engagement_rate": 0.16, "li_posts": 7  },
+    { "quarter": "2026_Q2", "chapter": "Toronto",   "events": 3, "attendance": 120, "largest_event": 60, "largest_event_name": "Sample Showcase",        "new_li_followers": 90,  "total_li_followers": 850, "li_impressions": 10000, "li_engagement_rate": 0.17, "li_posts": 12 },
+    { "quarter": "2026_Q2", "chapter": "Vancouver", "events": 1, "attendance": 14,  "largest_event": 14, "largest_event_name": "Sample Workshop",        "new_li_followers": 18,  "total_li_followers": 140, "li_impressions": 1600,  "li_engagement_rate": 0.12, "li_posts": 6  },
+    { "quarter": "2026_Q2", "chapter": "Ottawa",    "events": 1, "attendance": 9,   "largest_event": 9,  "largest_event_name": "Sample Panel",           "new_li_followers": 20,  "total_li_followers": 185, "li_impressions": 2000,  "li_engagement_rate": 0.15, "li_posts": 6  },
+    { "quarter": "2026_Q2", "chapter": "Calgary",   "events": 2, "attendance": 25,  "largest_event": 15, "largest_event_name": "Sample Picnic",          "new_li_followers": 12,  "total_li_followers": 92,  "li_impressions": 900,   "li_engagement_rate": 0.03, "li_posts": 4  },
+    { "quarter": "2026_Q2", "chapter": "Canada",    "events": 1, "attendance": 45,  "largest_event": 45, "largest_event_name": "Sample Hiring Talk",     "new_li_followers": 100, "total_li_followers": 320, "li_impressions": 11000, "li_engagement_rate": 0.16, "li_posts": 14 }
+  ]
+}

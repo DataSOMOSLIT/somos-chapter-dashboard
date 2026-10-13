@@ -14,4 +14,4 @@ chapter performance dashboards with our community leaders.
 ## Support
 
 If you need help accessing the dashboards, please write to
-**laura.lugo@somoslatinxintech.com**.
+**laura.lugo@somoslatinxintech.com** or **claudia.fernandez@somoslatinxintech.com**.
